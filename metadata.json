@@ -1,0 +1,6 @@
+{
+  "name": "UniExchange",
+  "description": "Hệ thống Thư viện / Sàn Trao đổi Giáo trình & Thiết bị Cũ trong Trường học. Kết nối sinh viên để chia sẻ tài nguyên học tập, giảm thiểu lãng phí và tiết kiệm chi phí.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

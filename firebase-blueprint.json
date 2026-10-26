@@ -1,0 +1,71 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Represents a student or admin in the system.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "The unique Firebase Auth UID." },
+        "displayName": { "type": "string", "description": "User's full name." },
+        "email": { "type": "string", "format": "email" },
+        "phoneNumber": { "type": "string" },
+        "role": { "type": "string", "enum": ["user", "admin"] },
+        "trustScore": { "type": "number", "description": "Reputation score (0-100)." },
+        "photoURL": { "type": "string" }
+      },
+      "required": ["uid", "role"]
+    },
+    "Item": {
+      "title": "Item",
+      "description": "A textbook or piece of equipment listed for exchange.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string", "maxLength": 100 },
+        "description": { "type": "string", "maxLength": 500 },
+        "category": { "type": "string", "enum": ["Textbook", "Equipment", "Note", "Other"] },
+        "subject": { "type": "string", "maxLength": 100 },
+        "condition": { "type": "string", "maxLength": 50 },
+        "price": { "type": "number", "description": "Price in VND (0 for donation)." },
+        "sellerId": { "type": "string" },
+        "sellerName": { "type": "string" },
+        "status": { "type": "string", "enum": ["available", "held", "exchanged"] },
+        "imageUrl": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "category", "sellerId", "status", "createdAt"]
+    },
+    "Hold": {
+      "title": "Hold",
+      "description": "A temporary reservation of an item.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "itemId": { "type": "string" },
+        "requesterId": { "type": "string" },
+        "requesterName": { "type": "string" },
+        "sellerId": { "type": "string" },
+        "expiresAt": { "type": "string", "format": "date-time" },
+        "meetupPoint": { "type": "string", "maxLength": 100 },
+        "status": { "type": "string", "enum": ["active", "completed", "cancelled", "expired"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["itemId", "requesterId", "sellerId", "expiresAt", "status", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "Public and private user profile data."
+    },
+    "/items/{itemId}": {
+      "schema": "Item",
+      "description": "Textbooks and equipment available for exchange."
+    },
+    "/holds/{holdId}": {
+      "schema": "Hold",
+      "description": "Active and past item reservations."
+    }
+  }
+}
