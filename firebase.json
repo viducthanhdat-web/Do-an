@@ -1,7 +1,11 @@
 {
   "firestore": {
+    "database": "ai-studio-planit-c53a22dd-bec2-45c8-8ceb-d38f69c9d02b",
     "rules": "firestore.rules",
     "indexes": "firestore.indexes.json"
+  },
+  "storage": {
+    "rules": "storage.rules"
   },
   "functions": [
     {

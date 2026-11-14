@@ -81,9 +81,9 @@ rules_version = '2';
 //    - seller_summary: map | null (optional, <= 10 keys)
 //    - requester_id: string (required, == request.auth.uid on create, != seller_id)
 //    - requester_summary: map | null (optional, <= 10 keys)
-//    - meetup_summary: map | string | null (optional)
+//    - meetup_summary: map | string | null (optional, <= 10 keys if map; proposed_time <= hold_expires_at if timestamp)
 //    - hold_start_time: timestamp (required)
-//    - hold_expires_at: timestamp (required, > hold_start_time)
+//    - hold_expires_at: timestamp (required, > hold_start_time, <= hold_start_time + 49h)
 //    - hold_status: 'active' | 'cancelled' | 'converted' | 'expired' (required)
 //    - cancel_reason: string | null (optional, <= 500 chars)
 //    - created_at: timestamp (required, immutable, == request.time on create)
@@ -376,6 +376,12 @@ service cloud.firestore {
              data.hold_start_time is timestamp &&
              data.hold_expires_at is timestamp &&
              data.hold_expires_at > data.hold_start_time &&
+             data.hold_expires_at <= data.hold_start_time + duration.value(49, 'h') &&
+             (!('meetup_summary' in data) ||
+              !(data.meetup_summary is map) ||
+              !('proposed_time' in data.meetup_summary) ||
+              !(data.meetup_summary.proposed_time is timestamp) ||
+              data.meetup_summary.proposed_time <= data.hold_expires_at) &&
              data.hold_status in ['active', 'cancelled', 'converted', 'expired'] &&
              isOptionalNullableString(data, 'cancel_reason', 500) &&
              data.created_at is timestamp &&
@@ -470,6 +476,7 @@ service cloud.firestore {
 
     function isValidHoldResolution() {
       let activeHold = get(/databases/$(database)/documents/holds/$(existing().active_hold_id));
+      let holdAfter = getAfter(/databases/$(database)/documents/holds/$(existing().active_hold_id));
       return isSignedIn() &&
              existing().item_status == 'held' &&
              existing().active_hold_id is string &&
@@ -478,9 +485,31 @@ service cloud.firestore {
              incoming().diff(existing()).affectedKeys().hasOnly(['item_status', 'active_hold_id', 'updated_at']) &&
              incoming().updated_at == request.time &&
              activeHold != null &&
-             (request.auth.uid == existing().seller_id ||
-              request.auth.uid == activeHold.data.requester_id ||
-              (incoming().item_status == 'available' && activeHold.data.hold_expires_at <= request.time));
+             holdAfter != null &&
+             (
+               (incoming().item_status == 'completed' &&
+                request.auth.uid == existing().seller_id &&
+                holdAfter.data.hold_status == 'converted') ||
+               (incoming().item_status == 'available' &&
+                holdAfter.data.hold_status in ['cancelled', 'expired'] &&
+                (request.auth.uid == existing().seller_id ||
+                 request.auth.uid == activeHold.data.requester_id ||
+                 (activeHold.data.hold_expires_at <= request.time &&
+                  holdAfter.data.hold_status == 'expired')))
+             );
+    }
+
+    function isExpiredHoldMeetupCancel() {
+      let holdDoc = get(/databases/$(database)/documents/holds/$(existing().hold_id));
+      return isSignedIn() &&
+             existing().status in ['proposed', 'confirmed', 'rescheduled'] &&
+             incoming().status == 'cancelled' &&
+             incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updated_at']) &&
+             incoming().updated_at == request.time &&
+             holdDoc != null &&
+             'hold_expires_at' in holdDoc.data &&
+             holdDoc.data.hold_expires_at is timestamp &&
+             holdDoc.data.hold_expires_at <= request.time;
     }
 
     function canRequesterCreateHold(holdId, data) {
@@ -538,8 +567,8 @@ service cloud.firestore {
                        incoming().current_trust_score >= 0 &&
                        incoming().current_trust_score <= 200 &&
                        (incoming().current_trust_score - existing().current_trust_score in [5, -10] ||
-                        (incoming().current_trust_score == 0 && existing().current_trust_score > 0 && existing().current_trust_score < 10) ||
-                        (incoming().current_trust_score == 200 && existing().current_trust_score > 195 && existing().current_trust_score < 200)) &&
+                        (incoming().current_trust_score == 0 && existing().current_trust_score >= 0 && existing().current_trust_score <= 10) ||
+                        (incoming().current_trust_score == 200 && existing().current_trust_score >= 195 && existing().current_trust_score <= 200)) &&
                        incoming().updated_at == request.time)
                     );
 
@@ -635,6 +664,7 @@ service cloud.firestore {
                       // Completing or Releasing/Cancelling a Hold (held -> completed | available)
                       ('active_hold_id' in existing() &&
                        existing().active_hold_id is string &&
+                       existing().active_hold_id.size() >= 1 &&
                        isValidHoldResolution())
                     );
 
@@ -681,15 +711,26 @@ service cloud.firestore {
                       isAdmin() ||
                       (isSignedIn() &&
                        existing().hold_status == 'active' &&
-                       incoming().diff(existing()).affectedKeys().hasOnly([
-                         'hold_status', 'cancel_reason', 'updated_at'
-                       ]) &&
                        incoming().updated_at == request.time &&
                        (
+                         // Branch A: Active meetup coordination & buyer receipt handshake
                          ((isOwner(existing().requester_id) || isOwner(existing().seller_id)) &&
-                          incoming().hold_status in ['cancelled', 'converted']) ||
-                         (existing().hold_expires_at <= request.time &&
-                          incoming().hold_status == 'expired')
+                          incoming().hold_status == 'active' &&
+                          incoming().diff(existing()).affectedKeys().hasOnly([
+                            'meetup_summary', 'updated_at'
+                          ])) ||
+                         // Branch B: Hold resolution (converted | cancelled | expired)
+                         (incoming().diff(existing()).affectedKeys().hasOnly([
+                            'hold_status', 'cancel_reason', 'updated_at'
+                          ]) &&
+                          (
+                            (isOwner(existing().seller_id) &&
+                             incoming().hold_status == 'converted') ||
+                            ((isOwner(existing().requester_id) || isOwner(existing().seller_id)) &&
+                             incoming().hold_status == 'cancelled') ||
+                            (existing().hold_expires_at <= request.time &&
+                             incoming().hold_status == 'expired')
+                          ))
                        ))
                     );
 
@@ -724,7 +765,11 @@ service cloud.firestore {
                          'proposed_time', 'location_id', 'location_name', 'status', 'note', 'updated_at'
                        ]) &&
                        incoming().status in ['proposed', 'confirmed', 'rescheduled', 'cancelled', 'completed'] &&
-                       incoming().updated_at == request.time)
+                       incoming().updated_at == request.time) ||
+                      (isSignedIn() &&
+                       'hold_id' in existing() &&
+                       isValidId(existing().hold_id) &&
+                       isExpiredHoldMeetupCancel())
                     );
 
       allow delete: if isAdmin();

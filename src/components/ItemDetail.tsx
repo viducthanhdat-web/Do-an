@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { collection, getDocs } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from '../lib/FirebaseProvider';
-import { createHoldWithTransaction } from '../lib/exchangeService';
+import { createHoldWithTransaction, validateHoldWindow } from '../lib/exchangeService';
 import {
   CATEGORY_LABELS,
   CONDITION_LABELS,
@@ -26,16 +26,24 @@ import {
 import { addHours, format } from 'date-fns';
 import { motion, AnimatePresence } from 'motion/react';
 
+function formatDatetimeLocal(date: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(
+    date.getHours()
+  )}:${pad(date.getMinutes())}`;
+}
+
 function getDefaultProposedTimeString(): string {
   const tomorrow = addHours(new Date(), 20);
   tomorrow.setMinutes(0, 0, 0);
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${tomorrow.getFullYear()}-${pad(tomorrow.getMonth() + 1)}-${pad(tomorrow.getDate())}T${pad(
-    tomorrow.getHours()
-  )}:00`;
+  return formatDatetimeLocal(tomorrow);
 }
 
-export const ItemDetail: React.FC<{ item: ItemDoc; onClose: () => void }> = ({ item, onClose }) => {
+export const ItemDetail: React.FC<{
+  item: ItemDoc;
+  onClose: () => void;
+  onViewMyHolds?: () => void;
+}> = ({ item, onClose, onViewMyHolds }) => {
   const { user, profile } = useAuth();
   const [locations, setLocations] = useState<MeetupLocationDoc[]>(DEFAULT_MEETUP_LOCATIONS);
   const [selectedLocId, setSelectedLocId] = useState(DEFAULT_MEETUP_LOCATIONS[0].id);
@@ -67,6 +75,9 @@ export const ItemDetail: React.FC<{ item: ItemDoc; onClose: () => void }> = ({ i
   const isSeller = user?.uid === item.seller_id;
   const trustScore = profile?.current_trust_score ?? 100;
   const isTrustLocked = !!profile && trustScore < 50;
+  const nowMs = Date.now();
+  const minTimeStr = formatDatetimeLocal(new Date(nowMs + 5 * 60 * 1000));
+  const maxTimeStr = formatDatetimeLocal(new Date(nowMs + holdHours * 3600 * 1000));
 
   const handleHold = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -77,9 +88,7 @@ export const ItemDetail: React.FC<{ item: ItemDoc; onClose: () => void }> = ({ i
     try {
       const selectedLoc = locations.find((l) => l.id === selectedLocId) || locations[0];
       const proposedDate = new Date(proposedTimeStr);
-      if (isNaN(proposedDate.getTime()) || proposedDate.getTime() <= Date.now()) {
-        throw new Error('Thời gian hẹn gặp phải lớn hơn thời điểm hiện tại.');
-      }
+      validateHoldWindow(holdHours, proposedDate);
 
       const res = await createHoldWithTransaction({
         itemId: item.id,
@@ -214,7 +223,17 @@ export const ItemDetail: React.FC<{ item: ItemDoc; onClose: () => void }> = ({ i
                         </label>
                         <select
                           value={holdHours}
-                          onChange={(e) => setHoldHours(Number(e.target.value) as 24 | 48)}
+                          onChange={(e) => {
+                            const nextHours = Number(e.target.value) as 24 | 48;
+                            setHoldHours(nextHours);
+                            const currentProposed = new Date(proposedTimeStr);
+                            if (
+                              !isNaN(currentProposed.getTime()) &&
+                              currentProposed.getTime() > Date.now() + nextHours * 3600 * 1000
+                            ) {
+                              setProposedTimeStr(getDefaultProposedTimeString());
+                            }
+                          }}
                           className="w-full px-3.5 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold outline-none"
                         >
                           <option value={24}>Giữ chỗ trong 24 giờ</option>
@@ -231,6 +250,8 @@ export const ItemDetail: React.FC<{ item: ItemDoc; onClose: () => void }> = ({ i
                         <input
                           required
                           type="datetime-local"
+                          min={minTimeStr}
+                          max={maxTimeStr}
                           value={proposedTimeStr}
                           onChange={(e) => setProposedTimeStr(e.target.value)}
                           className="w-full px-3.5 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold outline-none"
@@ -309,7 +330,7 @@ export const ItemDetail: React.FC<{ item: ItemDoc; onClose: () => void }> = ({ i
                   </div>
                 </div>
                 <button
-                  onClick={onClose}
+                  onClick={onViewMyHolds || onClose}
                   className="w-full bg-slate-900 text-white py-3.5 rounded-2xl font-bold hover:bg-slate-800 transition-all"
                 >
                   Xem trong Lịch hẹn của tôi

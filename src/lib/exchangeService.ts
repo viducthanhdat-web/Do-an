@@ -35,7 +35,33 @@ export interface CreateHoldInput {
 }
 
 const LOCK_DURATION_MS = 7 * 24 * 3600 * 1000;
+const EXPIRED_HOLD_SKEW_MARGIN_MS = 60 * 1000;
 let isReleasingExpiredHolds = false;
+
+/**
+ * FR-05.2: Kiểm tra thời gian hẹn gặp phải nằm trong khung giữ chỗ 24h hoặc 48h đã chọn
+ */
+export function validateHoldWindow(
+  holdDurationHours: number,
+  proposedTime: Date,
+  nowMs: number = Date.now()
+): void {
+  if (holdDurationHours !== 24 && holdDurationHours !== 48) {
+    throw new Error('Thời hạn giữ chỗ chỉ hỗ trợ 24 giờ hoặc 48 giờ.');
+  }
+  if (!(proposedTime instanceof Date) || isNaN(proposedTime.getTime())) {
+    throw new Error('Thời gian hẹn gặp không hợp lệ.');
+  }
+  if (proposedTime.getTime() <= nowMs) {
+    throw new Error('Thời gian hẹn gặp phải lớn hơn thời điểm hiện tại.');
+  }
+  const maxAllowedMs = nowMs + holdDurationHours * 3600 * 1000;
+  if (proposedTime.getTime() > maxAllowedMs) {
+    throw new Error(
+      `Thời gian hẹn gặp phải nằm trong khung giữ chỗ ${holdDurationHours} giờ đã chọn (FR-05.2).`
+    );
+  }
+}
 
 /**
  * Hàm dùng chung cập nhật Điểm tín nhiệm + khóa giữ chỗ (nếu < 50đ) + ghi sổ cái bất biến trust_history
@@ -53,6 +79,7 @@ function applyTrustScoreDeltaInTx(params: {
   const { tx, userRef, userData, delta, eventType, referenceId, description, nowServer } = params;
   const currentScore = userData.current_trust_score ?? 100;
   const newBalance = Math.max(0, Math.min(200, currentScore + delta));
+  const appliedDelta = newBalance === currentScore ? 0 : delta;
   const holdLockedUntil =
     newBalance < 50
       ? Timestamp.fromDate(new Date(Date.now() + LOCK_DURATION_MS))
@@ -68,7 +95,7 @@ function applyTrustScoreDeltaInTx(params: {
 
   const trustLogRef = doc(collection(db, 'users', userRef.id, 'trust_history'));
   tx.set(trustLogRef, {
-    score_change: delta,
+    score_change: appliedDelta,
     balance_after: newBalance,
     event_type: eventType,
     reference_id: referenceId,
@@ -81,13 +108,16 @@ function applyTrustScoreDeltaInTx(params: {
  * FR-05 & NFR-01: Đặt giữ chỗ 24-48h & tạo lịch hẹn bằng Firestore runTransaction
  * Đảm bảo tính nguyên tử (ACID) chống Race Condition khi nhiều sinh viên bấm giữ cùng 1 giây.
  */
-export async function createHoldWithTransaction(input: CreateHoldInput): Promise<{ holdId: string; expiresAt: Date }> {
+export async function createHoldWithTransaction(
+  input: CreateHoldInput
+): Promise<{ holdId: string; expiresAt: Date }> {
   const { itemId, requester, holdDurationHours, locationId, locationName, proposedTime, note } = input;
+  validateHoldWindow(holdDurationHours, proposedTime);
 
   const requesterRef = doc(db, 'users', requester.uid);
   const itemRef = doc(db, 'items', itemId);
   const newHoldRef = doc(collection(db, 'holds'));
-  const newMeetupRef = doc(collection(db, 'meetups'));
+  const newMeetupRef = doc(db, 'meetups', newHoldRef.id);
 
   return await runTransaction(db, async (tx) => {
     const [reqSnap, itemSnap] = await Promise.all([tx.get(requesterRef), tx.get(itemRef)]);
@@ -132,6 +162,7 @@ export async function createHoldWithTransaction(input: CreateHoldInput): Promise
     const expiresTimestamp = Timestamp.fromDate(expiresDate);
     const proposedTimestamp = Timestamp.fromDate(proposedTime);
     const nowServer = serverTimestamp();
+    const cleanNote = note.trim();
 
     tx.set(newHoldRef, {
       item_id: itemId,
@@ -148,10 +179,13 @@ export async function createHoldWithTransaction(input: CreateHoldInput): Promise
         phone_number: reqData.phone_number || requester.phone_number || '',
       },
       meetup_summary: {
+        meetup_id: newMeetupRef.id,
         location_id: locationId,
         location_name: locationName,
         proposed_time: proposedTimestamp,
-        note: note.trim(),
+        status: 'proposed',
+        buyer_confirmed: false,
+        note: cleanNote,
       },
       hold_start_time: nowServer,
       hold_expires_at: expiresTimestamp,
@@ -170,7 +204,7 @@ export async function createHoldWithTransaction(input: CreateHoldInput): Promise
       location_name: locationName,
       proposed_time: proposedTimestamp,
       status: 'proposed',
-      note: note.trim(),
+      note: cleanNote,
       created_at: nowServer,
       updated_at: nowServer,
     });
@@ -186,7 +220,169 @@ export async function createHoldWithTransaction(input: CreateHoldInput): Promise
 }
 
 /**
- * FR-06 & FR-07: Hoàn tất giao dịch trao đổi nguyên tử (+5 Điểm tín nhiệm, tạo Transaction & StatusLog)
+ * FR-05.3: Người đăng (Seller) chốt xác nhận lịch hẹn gặp mặt
+ */
+export async function confirmHoldMeetupWithTransaction(
+  hold: HoldDoc,
+  actorUid: string
+): Promise<void> {
+  if (actorUid !== hold.seller_id) {
+    throw new Error('Chỉ người đăng vật phẩm (Seller) mới có quyền chốt lịch hẹn.');
+  }
+
+  const holdRef = doc(db, 'holds', hold.id);
+  const meetupId = hold.meetup_summary?.meetup_id || hold.id;
+  const meetupRef = doc(db, 'meetups', meetupId);
+
+  await runTransaction(db, async (tx) => {
+    const [holdSnap, meetupSnap] = await Promise.all([tx.get(holdRef), tx.get(meetupRef)]);
+
+    if (!holdSnap.exists() || holdSnap.data().hold_status !== 'active') {
+      throw new Error('Phiên giữ chỗ này không còn ở trạng thái đang hoạt động.');
+    }
+
+    const holdData = holdSnap.data();
+    if (actorUid !== holdData.seller_id) {
+      throw new Error('Chỉ người đăng vật phẩm (Seller) mới có quyền chốt lịch hẹn.');
+    }
+
+    const nowServer = serverTimestamp();
+    const existingSummary = holdData.meetup_summary || {};
+
+    tx.update(holdRef, {
+      meetup_summary: {
+        ...existingSummary,
+        meetup_id: meetupId,
+        status: 'confirmed',
+      },
+      updated_at: nowServer,
+    });
+
+    if (meetupSnap.exists()) {
+      tx.update(meetupRef, {
+        status: 'confirmed',
+        updated_at: nowServer,
+      });
+    }
+  });
+}
+
+/**
+ * FR-05.3: Hai bên đề xuất dời giờ hoặc đổi điểm hẹn trong khuôn viên trường (vẫn trong hạn giữ chỗ)
+ */
+export async function rescheduleHoldMeetupWithTransaction(params: {
+  hold: HoldDoc;
+  actorUid: string;
+  locationId: string;
+  locationName: string;
+  proposedTime: Date;
+  note: string;
+}): Promise<void> {
+  const { hold, actorUid, locationId, locationName, proposedTime, note } = params;
+  if (!locationName.trim()) {
+    throw new Error('Vui lòng chọn điểm hẹn hợp lệ.');
+  }
+  if (!(proposedTime instanceof Date) || isNaN(proposedTime.getTime())) {
+    throw new Error('Thời gian hẹn gặp mới không hợp lệ.');
+  }
+
+  const holdRef = doc(db, 'holds', hold.id);
+  const meetupId = hold.meetup_summary?.meetup_id || hold.id;
+  const meetupRef = doc(db, 'meetups', meetupId);
+
+  await runTransaction(db, async (tx) => {
+    const [holdSnap, meetupSnap] = await Promise.all([tx.get(holdRef), tx.get(meetupRef)]);
+
+    if (!holdSnap.exists() || holdSnap.data().hold_status !== 'active') {
+      throw new Error('Phiên giữ chỗ này không còn ở trạng thái đang hoạt động.');
+    }
+
+    const holdData = holdSnap.data();
+    if (actorUid !== holdData.seller_id && actorUid !== holdData.requester_id) {
+      throw new Error('Bạn không có quyền điều chỉnh lịch hẹn của phiên giữ chỗ này.');
+    }
+
+    const nowMs = Date.now();
+    const expiresMs = toDateSafe(holdData.hold_expires_at).getTime();
+    if (proposedTime.getTime() <= nowMs) {
+      throw new Error('Thời gian hẹn gặp mới phải lớn hơn thời điểm hiện tại.');
+    }
+    if (proposedTime.getTime() > expiresMs) {
+      throw new Error('Thời gian hẹn gặp mới không được vượt quá thời hạn giữ chỗ hiện tại (FR-05.2).');
+    }
+
+    const nowServer = serverTimestamp();
+    const proposedTimestamp = Timestamp.fromDate(proposedTime);
+    const cleanLocationName = locationName.trim();
+    const cleanNote = note.trim();
+    const existingSummary = holdData.meetup_summary || {};
+
+    tx.update(holdRef, {
+      meetup_summary: {
+        ...existingSummary,
+        meetup_id: meetupId,
+        location_id: locationId,
+        location_name: cleanLocationName,
+        proposed_time: proposedTimestamp,
+        status: 'rescheduled',
+        buyer_confirmed: false,
+        note: cleanNote,
+      },
+      updated_at: nowServer,
+    });
+
+    if (meetupSnap.exists()) {
+      tx.update(meetupRef, {
+        location_id: locationId,
+        location_name: cleanLocationName,
+        proposed_time: proposedTimestamp,
+        status: 'rescheduled',
+        note: cleanNote,
+        updated_at: nowServer,
+      });
+    }
+  });
+}
+
+/**
+ * FR-06.1: Người nhận (Requester) báo đã nhận được vật phẩm tại điểm hẹn (chờ Seller xác nhận hoàn tất)
+ */
+export async function confirmBuyerReceivedWithTransaction(
+  hold: HoldDoc,
+  actorUid: string
+): Promise<void> {
+  if (actorUid !== hold.requester_id) {
+    throw new Error('Chỉ sinh viên đặt nhận (Requester) mới có thể xác nhận đã nhận đồ.');
+  }
+
+  const holdRef = doc(db, 'holds', hold.id);
+  const meetupId = hold.meetup_summary?.meetup_id || hold.id;
+
+  await runTransaction(db, async (tx) => {
+    const holdSnap = await tx.get(holdRef);
+    if (!holdSnap.exists() || holdSnap.data().hold_status !== 'active') {
+      throw new Error('Phiên giữ chỗ này không còn ở trạng thái đang hoạt động.');
+    }
+
+    const holdData = holdSnap.data();
+    if (actorUid !== holdData.requester_id) {
+      throw new Error('Chỉ sinh viên đặt nhận (Requester) mới có thể xác nhận đã nhận đồ.');
+    }
+
+    const existingSummary = holdData.meetup_summary || {};
+    tx.update(holdRef, {
+      meetup_summary: {
+        ...existingSummary,
+        meetup_id: meetupId,
+        buyer_confirmed: true,
+      },
+      updated_at: serverTimestamp(),
+    });
+  });
+}
+
+/**
+ * FR-06 & FR-07: Seller xác nhận giao đồ hoàn tất nguyên tử (+5 Điểm tín nhiệm, tạo Transaction & StatusLog)
  */
 export async function completeHoldWithTransaction(
   hold: HoldDoc,
@@ -196,18 +392,28 @@ export async function completeHoldWithTransaction(
   const holdRef = doc(db, 'holds', hold.id);
   const itemRef = doc(db, 'items', hold.item_id);
   const requesterRef = doc(db, 'users', hold.requester_id);
+  const meetupId = hold.meetup_summary?.meetup_id || hold.id;
+  const meetupRef = doc(db, 'meetups', meetupId);
   const txRef = doc(collection(db, 'transactions'));
   const statusLogRef = doc(collection(db, 'transactions', txRef.id, 'status_logs'));
 
   await runTransaction(db, async (tx) => {
-    const [holdSnap, itemSnap, reqSnap] = await Promise.all([
+    const [holdSnap, itemSnap, reqSnap, meetupSnap] = await Promise.all([
       tx.get(holdRef),
       tx.get(itemRef),
       tx.get(requesterRef),
+      tx.get(meetupRef),
     ]);
 
     if (!holdSnap.exists() || holdSnap.data().hold_status !== 'active') {
       throw new Error('Phiên giữ chỗ này không còn ở trạng thái đang hoạt động.');
+    }
+
+    const holdData = holdSnap.data();
+    if (actorUid !== holdData.seller_id) {
+      throw new Error(
+        'Chỉ người đăng vật phẩm (Seller) mới có quyền xác nhận đã bàn giao hoàn tất (FR-06.1).'
+      );
     }
 
     const itemData = itemSnap.exists() ? itemSnap.data() : {};
@@ -224,6 +430,13 @@ export async function completeHoldWithTransaction(
       tx.update(itemRef, {
         item_status: 'completed',
         active_hold_id: null,
+        updated_at: nowServer,
+      });
+    }
+
+    if (meetupSnap.exists()) {
+      tx.update(meetupRef, {
+        status: 'completed',
         updated_at: nowServer,
       });
     }
@@ -246,7 +459,7 @@ export async function completeHoldWithTransaction(
       from_status: 'pending',
       to_status: 'completed',
       changed_by: actorUid,
-      reason: 'Hai bên xác nhận đã giao/nhận vật phẩm thành công tại điểm hẹn',
+      reason: 'Người đăng xác nhận đã bàn giao vật phẩm thành công tại điểm hẹn',
       timestamp: nowServer,
     });
 
@@ -266,7 +479,7 @@ export async function completeHoldWithTransaction(
 }
 
 /**
- * FR-06 & FR-07: Hủy giữ chỗ (Trả sách về 'available'; nếu người nhận tự hủy thì trừ -10 điểm uy tín)
+ * FR-06 & FR-07: Hủy giữ chỗ (Trả sách về 'available', hủy Meetup; nếu người nhận tự hủy thì trừ -10 điểm uy tín)
  */
 export async function cancelHoldWithTransaction(
   hold: HoldDoc,
@@ -276,13 +489,16 @@ export async function cancelHoldWithTransaction(
   const holdRef = doc(db, 'holds', hold.id);
   const itemRef = doc(db, 'items', hold.item_id);
   const requesterRef = doc(db, 'users', hold.requester_id);
+  const meetupId = hold.meetup_summary?.meetup_id || hold.id;
+  const meetupRef = doc(db, 'meetups', meetupId);
   const penalizeRequester = actorUid === hold.requester_id;
 
   await runTransaction(db, async (tx) => {
-    const [holdSnap, itemSnap, reqSnap] = await Promise.all([
+    const [holdSnap, itemSnap, reqSnap, meetupSnap] = await Promise.all([
       tx.get(holdRef),
       tx.get(itemRef),
       tx.get(requesterRef),
+      tx.get(meetupRef),
     ]);
 
     if (!holdSnap.exists() || holdSnap.data().hold_status !== 'active') {
@@ -301,6 +517,13 @@ export async function cancelHoldWithTransaction(
       tx.update(itemRef, {
         item_status: 'available',
         active_hold_id: null,
+        updated_at: nowServer,
+      });
+    }
+
+    if (meetupSnap.exists()) {
+      tx.update(meetupRef, {
+        status: 'cancelled',
         updated_at: nowServer,
       });
     }
@@ -328,11 +551,12 @@ export async function releaseExpiredHoldsIfAny(): Promise<number> {
   isReleasingExpiredHolds = true;
 
   try {
-    const now = Timestamp.now();
+    // Dùng biên độ an toàn 60s để tránh lệch đồng hồ Client so với request.time trên Server
+    const safeCutoff = Timestamp.fromMillis(Date.now() - EXPIRED_HOLD_SKEW_MARGIN_MS);
     const q = query(
       collection(db, 'holds'),
       where('hold_status', '==', 'active'),
-      where('hold_expires_at', '<=', now),
+      where('hold_expires_at', '<=', safeCutoff),
       limit(20)
     );
 
@@ -348,7 +572,17 @@ export async function releaseExpiredHoldsIfAny(): Promise<number> {
           const data = freshHold.data();
           const itemRef = doc(db, 'items', data.item_id);
           const reqRef = doc(db, 'users', data.requester_id);
-          const [itemSnap, reqSnap] = await Promise.all([tx.get(itemRef), tx.get(reqRef)]);
+          const meetupId =
+            typeof data.meetup_summary?.meetup_id === 'string' && data.meetup_summary.meetup_id
+              ? data.meetup_summary.meetup_id
+              : holdDoc.id;
+          const meetupRef = doc(db, 'meetups', meetupId);
+
+          const [itemSnap, reqSnap, meetupSnap] = await Promise.all([
+            tx.get(itemRef),
+            tx.get(reqRef),
+            tx.get(meetupRef),
+          ]);
           const nowServer = serverTimestamp();
 
           tx.update(holdDoc.ref, {
@@ -361,6 +595,13 @@ export async function releaseExpiredHoldsIfAny(): Promise<number> {
             tx.update(itemRef, {
               item_status: 'available',
               active_hold_id: null,
+              updated_at: nowServer,
+            });
+          }
+
+          if (meetupSnap.exists()) {
+            tx.update(meetupRef, {
+              status: 'cancelled',
               updated_at: nowServer,
             });
           }

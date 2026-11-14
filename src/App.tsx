@@ -48,7 +48,14 @@ function AppContent() {
 
       <AnimatePresence>
         {selectedItem && (
-          <ItemDetail item={selectedItem} onClose={() => setSelectedItem(null)} />
+          <ItemDetail
+            item={selectedItem}
+            onClose={() => setSelectedItem(null)}
+            onViewMyHolds={() => {
+              setSelectedItem(null);
+              setActiveTab('my-holds');
+            }}
+          />
         )}
       </AnimatePresence>
     </Layout>

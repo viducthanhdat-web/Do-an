@@ -12,6 +12,7 @@ export interface UserProfile {
   current_trust_score: number;
   status: UserStatus;
   hold_locked_until: any | null;
+  last_trust_ref_id?: string | null;
   created_at: any;
   updated_at: any;
 }
@@ -100,11 +101,14 @@ export interface ModerationLogDoc {
 }
 
 export type HoldStatus = 'active' | 'expired' | 'cancelled' | 'converted';
+export type MeetupStatus = 'proposed' | 'confirmed' | 'rescheduled' | 'cancelled' | 'completed';
 
 export interface HoldDoc {
   id: string;
   item_id: string;
   item_title: string;
+  item_type?: ItemType;
+  item_price?: number;
   primary_image?: string;
   seller_id: string;
   seller_summary?: {
@@ -117,11 +121,15 @@ export interface HoldDoc {
     phone_number: string;
   };
   meetup_summary?: {
+    meetup_id?: string;
     location_id: string;
     location_name: string;
     proposed_time: any;
+    status?: MeetupStatus;
+    buyer_confirmed?: boolean;
     note: string;
   };
+  hold_duration_hours?: 24 | 48;
   hold_start_time: any;
   hold_expires_at: any;
   hold_status: HoldStatus;
@@ -139,7 +147,7 @@ export interface MeetupDoc {
   location_id: string;
   location_name: string;
   proposed_time: any;
-  status: 'proposed' | 'confirmed' | 'rescheduled' | 'cancelled' | 'completed';
+  status: MeetupStatus;
   note: string;
   created_at: any;
   updated_at: any;
@@ -240,6 +248,15 @@ export function normalizeUserDoc(
  * Chuẩn hóa đọc dữ liệu Hold hỗ trợ tương thích ngược
  */
 export function normalizeHoldDoc(id: string, raw: any): HoldDoc {
+  const startRaw = raw.hold_start_time || raw.created_at || raw.createdAt;
+  const expiresRaw = raw.hold_expires_at || raw.expiresAt;
+  const durationHours =
+    startRaw && expiresRaw
+      ? Math.round((toDateSafe(expiresRaw).getTime() - toDateSafe(startRaw).getTime()) / 3600000) <= 25
+        ? 24
+        : 48
+      : undefined;
+
   return {
     id,
     item_id: raw.item_id || raw.itemId || '',
@@ -255,14 +272,28 @@ export function normalizeHoldDoc(id: string, raw: any): HoldDoc {
       full_name: raw.requesterName || 'Người nhận',
       phone_number: '',
     },
-    meetup_summary: raw.meetup_summary || {
-      location_id: '',
-      location_name: raw.meetupPoint || 'Thư viện',
-      proposed_time: raw.created_at || raw.createdAt,
-      note: '',
-    },
-    hold_start_time: raw.hold_start_time || raw.created_at || raw.createdAt,
-    hold_expires_at: raw.hold_expires_at || raw.expiresAt,
+    meetup_summary: raw.meetup_summary
+      ? {
+          meetup_id: raw.meetup_summary.meetup_id || id,
+          location_id: raw.meetup_summary.location_id || '',
+          location_name: raw.meetup_summary.location_name || 'Thư viện',
+          proposed_time: raw.meetup_summary.proposed_time || startRaw,
+          status: raw.meetup_summary.status || 'proposed',
+          buyer_confirmed: Boolean(raw.meetup_summary.buyer_confirmed),
+          note: raw.meetup_summary.note || '',
+        }
+      : {
+          meetup_id: id,
+          location_id: '',
+          location_name: raw.meetupPoint || 'Thư viện',
+          proposed_time: startRaw,
+          status: 'proposed',
+          buyer_confirmed: false,
+          note: '',
+        },
+    hold_duration_hours: durationHours,
+    hold_start_time: startRaw,
+    hold_expires_at: expiresRaw,
     hold_status: raw.hold_status || (raw.status === 'completed' ? 'converted' : raw.status) || 'active',
     cancel_reason: raw.cancel_reason ?? null,
     created_at: raw.created_at || raw.createdAt,

@@ -1,0 +1,29 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Default deny
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+
+    // Item photos uploaded under items/${uid}_${timestamp}_${fileName}
+    match /items/{fileName} {
+      allow read: if true;
+
+      allow create, update: if request.auth != null &&
+                            fileName.matches('^' + request.auth.uid + '_.*') &&
+                            request.resource != null &&
+                            request.resource.size < 5 * 1024 * 1024 &&
+                            request.resource.contentType.matches('image/.*');
+
+      allow delete: if request.auth != null && (
+                      fileName.matches('^' + request.auth.uid + '_.*') ||
+                      ('email' in request.auth.token &&
+                       request.auth.token.email == 'viducthanhdat3@gmail.com' &&
+                       request.auth.token.get('email_verified', false) == true) ||
+                      request.auth.token.get('role', '') == 'admin'
+                    );
+    }
+  }
+}

@@ -131,9 +131,13 @@ uniexchange/
 │   ├── src/index.ts               # Cloud Functions: createHoldOrder & Cronjob scheduledHoldAutoRelease
 │   ├── package.json               # Dependencies cho Firebase Functions (Node.js 20)
 │   └── tsconfig.json              # Cấu hình TypeScript cho Backend Serverless
-├── firebase.json                  # Cấu hình triển khai Firebase CLI (Firestore Rules, Indexes & Functions)
+├── firebase.json                  # Cấu hình triển khai Firebase CLI (Firestore, Storage, Indexes & Functions)
+├── .firebaserc                    # Khai báo Firebase / GCP Project ID mặc định
 ├── firestore.rules                # Quy tắc bảo mật Firestore v2 (Default Deny + Domain Validators)
+├── storage.rules                  # Quy tắc bảo mật Firebase Storage (giới hạn ảnh < 5MB theo UID)
 ├── firestore.indexes.json         # 10 Composite Indexes tối ưu truy vấn sàn & quét Hold quá hạn
+├── scripts/
+│   └── verify-race-condition.ts   # Kiểm thử tự động chống Race Condition & ràng buộc FR-05/FR-06 (WBS 4.2)
 ├── firebase-applet-config.json    # Thông số kết nối Firebase Project cho Frontend
 ├── firebase-blueprint.json        # Đặc tả JSON Schema cho toàn bộ thực thể Firestore
 ├── SRS_UniExchange.md             # Tài liệu Đặc tả Yêu cầu Phần mềm (IEEE 830 / ISO 29148)
@@ -163,17 +167,18 @@ cp .env.example .env.local
 # 3. Khởi chạy máy chủ phát triển tại http://localhost:3000
 npm run dev
 
-# 4. Kiểm tra kiểu dữ liệu TypeScript & đóng gói bản dựng Production
+# 4. Kiểm tra kiểu dữ liệu TypeScript, kiểm thử Race Condition & đóng gói bản dựng Production
 npm run lint
+npm run test:race
 npm run build
 ```
 
 ### 7.3. Kiểm tra (Dry-Run) & Triển khai Backend lên Firebase / Google Cloud
 
 ```bash
-# 1. Đăng nhập và chọn đúng Firebase / GCP Project
+# 1. Đăng nhập và chọn đúng Firebase / GCP Project (mặc định đọc từ .firebaserc)
 firebase login
-firebase use <YOUR_FIREBASE_PROJECT_ID>
+firebase use default
 
 # 2. Cài đặt & biên dịch kiểm tra mã nguồn Cloud Functions
 npm --prefix functions install
@@ -182,8 +187,8 @@ npm --prefix functions run build
 # 3. Kiểm tra cú pháp & tính hợp lệ của Firestore Security Rules trước khi áp dụng (Preview/Dry-run)
 firebase deploy --only firestore:rules --dry-run
 
-# 4. Triển khai chính thức Rules, Composite Indexes và Cloud Functions
-firebase deploy --only firestore:rules,firestore:indexes,functions
+# 4. Triển khai chính thức Rules, Storage Rules, Composite Indexes và Cloud Functions
+firebase deploy --only firestore:rules,firestore:indexes,storage,functions
 ```
 
 > **💡 Quyền Quản trị viên (`Admin`):** Hệ thống nhận diện `Admin` qua Custom Claim `role == 'admin'`, trường `users/{uid}.role == 'admin'` trên Firestore, hoặc email quản trị khởi tạo `viducthanhdat3@gmail.com`.
