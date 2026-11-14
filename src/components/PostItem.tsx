@@ -1,35 +1,74 @@
-import React, { useState } from 'react';
-import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
+import React, { useEffect, useState } from 'react';
+import { addDoc, collection, getDocs, serverTimestamp } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../lib/firebase';
 import { useAuth } from '../lib/FirebaseProvider';
 import { handleFirestoreError, OperationType } from '../lib/utils';
-import { 
-  X, 
-  Upload, 
-  Tag, 
-  Book, 
-  Package, 
-  FileText, 
+import {
+  ConditionLevel,
+  DEFAULT_SUBJECTS,
+  ItemType,
+  SubjectDoc,
+} from '../types/schema';
+import {
+  X,
+  Upload,
+  Tag,
+  Book,
+  Package,
+  FileText,
   Layers,
   ArrowLeft,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Gift,
+  Coins,
+  CheckCircle2,
 } from 'lucide-react';
-import { motion } from 'motion/react';
 
-export const PostItem: React.FC<{ onCancel: () => void, onSuccess: () => void }> = ({ onCancel, onSuccess }) => {
+export const PostItem: React.FC<{ onCancel: () => void; onSuccess: () => void }> = ({
+  onCancel,
+  onSuccess,
+}) => {
   const { user, profile } = useAuth();
   const [loading, setLoading] = useState(false);
+  const [subjects, setSubjects] = useState<SubjectDoc[]>(DEFAULT_SUBJECTS);
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
-  const [formData, setFormData] = useState({
+
+  const [formData, setFormData] = useState<{
+    title: string;
+    description: string;
+    category_id: string;
+    subject_id: string;
+    custom_subject: string;
+    condition_level: ConditionLevel;
+    item_type: ItemType;
+    price: number;
+  }>({
     title: '',
     description: '',
-    category: 'Textbook',
-    subject: '',
-    condition: '80%',
-    price: 0
+    category_id: 'giao-trinh',
+    subject_id: 'BAS1201',
+    custom_subject: '',
+    condition_level: 'used_good',
+    item_type: 'gift',
+    price: 0,
   });
+
+  useEffect(() => {
+    getDocs(collection(db, 'subjects'))
+      .then((snap) => {
+        if (!snap.empty) {
+          const list: SubjectDoc[] = [];
+          snap.forEach((d) => {
+            const data = d.data() as Omit<SubjectDoc, 'id'>;
+            if (data.is_active !== false) list.push({ id: d.id, ...data });
+          });
+          if (list.length > 0) setSubjects(list);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -45,26 +84,55 @@ export const PostItem: React.FC<{ onCancel: () => void, onSuccess: () => void }>
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user) return;
+    if (!user || !profile) return;
 
     setLoading(true);
     try {
-      let imageUrl = '';
+      let uploadedUrl = '';
       if (imageFile) {
-        const storageRef = ref(storage, `items/${Date.now()}_${imageFile.name}`);
+        const storageRef = ref(storage, `items/${user.uid}_${Date.now()}_${imageFile.name}`);
         const snapshot = await uploadBytes(storageRef, imageFile);
-        imageUrl = await getDownloadURL(snapshot.ref);
+        uploadedUrl = await getDownloadURL(snapshot.ref);
       }
 
+      const selectedSub = subjects.find((s) => s.subject_code === formData.subject_id || s.id === formData.subject_id);
+      const subjectIdValue = formData.subject_id === 'OTHER' ? null : formData.subject_id;
+      const subjectDisplay =
+        formData.subject_id === 'OTHER'
+          ? formData.custom_subject.trim() || 'Chung'
+          : selectedSub
+          ? `${selectedSub.subject_code} - ${selectedSub.subject_name}`
+          : formData.subject_id;
+
+      const finalPrice = formData.item_type === 'gift' ? 0 : Math.max(1000, formData.price);
+      const isAdmin = profile.role === 'admin';
+      const nowServer = serverTimestamp();
+
       await addDoc(collection(db, 'items'), {
-        ...formData,
-        imageUrl,
-        sellerId: user.uid,
-        sellerName: profile?.displayName || 'Anonymous',
-        status: 'available',
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
+        seller_id: user.uid,
+        seller_summary: {
+          full_name: profile.full_name || 'Sinh viên',
+          trust_score: profile.current_trust_score ?? 100,
+          avatar_url: profile.avatar_url || '',
+        },
+        category_id: formData.category_id,
+        subject_id: subjectIdValue,
+        subject_name: subjectDisplay,
+        title: formData.title.trim(),
+        description: formData.description.trim() || 'Sách/thiết bị còn sử dụng tốt.',
+        item_type: formData.item_type,
+        price: finalPrice,
+        condition_level: formData.condition_level,
+        image_urls: uploadedUrl ? [uploadedUrl] : [],
+        primary_image: uploadedUrl,
+        item_status: 'available',
+        active_hold_id: null,
+        moderation_status: isAdmin ? 'approved' : 'pending',
+        reject_reason: null,
+        created_at: nowServer,
+        updated_at: nowServer,
       });
+
       onSuccess();
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, 'items');
@@ -73,28 +141,37 @@ export const PostItem: React.FC<{ onCancel: () => void, onSuccess: () => void }>
     }
   };
 
+  const categories = [
+    { id: 'giao-trinh', label: 'Giáo trình', icon: Book },
+    { id: 'thiet-bi', label: 'Thiết bị', icon: Package },
+    { id: 'tai-lieu', label: 'Tài liệu ôn thi', icon: FileText },
+    { id: 'khac', label: 'Khác', icon: Layers },
+  ];
+
   return (
     <div className="max-w-3xl mx-auto">
-      <button 
+      <button
         onClick={onCancel}
-        className="flex items-center gap-2 text-slate-500 hover:text-slate-900 mb-8 font-semibold transition-colors"
+        className="flex items-center gap-2 text-slate-500 hover:text-slate-900 mb-6 font-semibold transition-colors"
       >
         <ArrowLeft size={20} />
         Quay lại sàn trao đổi
       </button>
 
       <div className="bg-white border border-slate-200 rounded-[2.5rem] p-8 lg:p-12 shadow-xl shadow-slate-200/50">
-        <div className="mb-10">
-          <h2 className="text-3xl font-bold text-slate-900 mb-2 tracking-tight">Đăng tin trao đổi</h2>
-          <p className="text-slate-500 font-medium text-lg">Chia sẻ tài liệu và thiết bị cũ cho cộng đồng sinh viên.</p>
+        <div className="mb-8">
+          <h2 className="text-3xl font-bold text-slate-900 mb-2 tracking-tight">Đăng tin chia sẻ học liệu</h2>
+          <p className="text-slate-500 font-medium">
+            Bài đăng sẽ được Ban quản trị kiểm duyệt nhanh (FR-03) trước khi hiển thị công khai trên sàn.
+          </p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-8">
-          {/* Image Upload Area */}
-          <div className="space-y-3">
+        <form onSubmit={handleSubmit} className="space-y-7">
+          {/* Image Upload */}
+          <div className="space-y-2.5">
             <label className="text-sm font-bold text-slate-700 flex items-center gap-2">
               <ImageIcon size={16} />
-              Hình ảnh món đồ
+              Hình ảnh thực tế của sách / thiết bị
             </label>
             <div className="flex items-center justify-center w-full">
               {imagePreview ? (
@@ -106,7 +183,7 @@ export const PostItem: React.FC<{ onCancel: () => void, onSuccess: () => void }>
                       setImageFile(null);
                       setImagePreview(null);
                     }}
-                    className="absolute top-4 right-4 p-2 bg-white/80 backdrop-blur-md rounded-full text-slate-600 hover:text-red-500 shadow-sm transition-all"
+                    className="absolute top-4 right-4 p-2 bg-white/90 rounded-full text-slate-700 hover:text-red-600 shadow-sm"
                   >
                     <X size={20} />
                   </button>
@@ -114,133 +191,182 @@ export const PostItem: React.FC<{ onCancel: () => void, onSuccess: () => void }>
               ) : (
                 <label className="flex flex-col items-center justify-center w-full aspect-video border-2 border-slate-200 border-dashed rounded-2xl cursor-pointer bg-slate-50 hover:bg-slate-100 transition-all group">
                   <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                    <Upload className="w-12 h-12 mb-4 text-slate-400 group-hover:scale-110 transition-transform" />
-                    <p className="mb-2 text-sm text-slate-500"><span className="font-bold">Nhấn để tải lên</span> hoặc kéo thả</p>
-                    <p className="text-xs text-slate-400 uppercase font-bold tracking-widest">PNG, JPG hoặc JPEG</p>
+                    <Upload className="w-10 h-10 mb-3 text-slate-400 group-hover:scale-110 transition-transform" />
+                    <p className="mb-1 text-sm text-slate-600">
+                      <span className="font-bold">Nhấn để tải ảnh lên</span> (PNG, JPG, JPEG)
+                    </p>
+                    <p className="text-xs text-slate-400 font-semibold">Chụp rõ bìa sách hoặc tình trạng thiết bị</p>
                   </div>
                   <input type="file" className="hidden" accept="image/*" onChange={handleImageChange} />
                 </label>
               )}
             </div>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            <div className="space-y-3">
+
+          {/* Title & Subject */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-2.5">
               <label className="text-sm font-bold text-slate-700 flex items-center gap-2">
                 <Tag size={16} />
-                Tên món đồ
+                Tên giáo trình / thiết bị
               </label>
               <input
                 required
+                maxLength={100}
                 type="text"
-                placeholder="VD: Giáo trình Giải tích 1"
+                placeholder="VD: Giáo trình Cơ sở dữ liệu + Bài tập"
                 value={formData.title}
                 onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-slate-900 outline-none transition-all font-medium"
+                className="w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-slate-900 outline-none font-medium"
               />
             </div>
 
-            <div className="space-y-3">
+            <div className="space-y-2.5">
               <label className="text-sm font-bold text-slate-700 flex items-center gap-2">
                 <Layers size={16} />
-                Môn học
+                Học phần / Mã môn học
               </label>
-              <input
-                required
-                type="text"
-                placeholder="VD: Giải tích, Vật lý 1"
-                value={formData.subject}
-                onChange={(e) => setFormData({ ...formData, subject: e.target.value })}
-                className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-slate-900 outline-none transition-all font-medium"
-              />
-            </div>
-          </div>
-
-          <div className="space-y-3">
-            <label className="text-sm font-bold text-slate-700 flex items-center gap-2">
-              <Book size={16} />
-              Danh mục
-            </label>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              {['Textbook', 'Equipment', 'Note', 'Other'].map((cat) => (
-                <button
-                  key={cat}
-                  type="button"
-                  onClick={() => setFormData({ ...formData, category: cat })}
-                  className={`py-4 px-4 rounded-2xl border-2 transition-all flex flex-col items-center gap-2 font-bold text-xs ${
-                    formData.category === cat 
-                      ? 'border-slate-900 bg-slate-900 text-white shadow-lg' 
-                      : 'border-slate-100 bg-slate-50 text-slate-500 hover:border-slate-200'
-                  }`}
-                >
-                  {cat === 'Textbook' && <Book size={20} />}
-                  {cat === 'Equipment' && <Package size={20} />}
-                  {cat === 'Note' && <FileText size={20} />}
-                  {cat === 'Other' && <Layers size={20} />}
-                  {cat === 'Textbook' ? 'Giáo trình' : 
-                   cat === 'Equipment' ? 'Thiết bị' : 
-                   cat === 'Note' ? 'Tài liệu' : 'Khác'}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            <div className="space-y-3">
-              <label className="text-sm font-bold text-slate-700">Tình trạng (Mới %)</label>
               <select
-                value={formData.condition}
-                onChange={(e) => setFormData({ ...formData, condition: e.target.value })}
-                className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-slate-900 outline-none transition-all font-semibold"
+                value={formData.subject_id}
+                onChange={(e) => setFormData({ ...formData, subject_id: e.target.value })}
+                className="w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-slate-900 outline-none font-semibold"
               >
-                <option value="100%">100% (Như mới)</option>
-                <option value="95%">95%</option>
-                <option value="90%">90%</option>
-                <option value="80%">80%</option>
-                <option value="70%">70%</option>
-                <option value="60%">60%</option>
+                {subjects.map((sub) => (
+                  <option key={sub.id} value={sub.subject_code}>
+                    {sub.subject_code} — {sub.subject_name}
+                  </option>
+                ))}
+                <option value="OTHER">Môn học khác (tự nhập)...</option>
+              </select>
+              {formData.subject_id === 'OTHER' && (
+                <input
+                  required
+                  type="text"
+                  placeholder="Nhập mã hoặc tên môn học..."
+                  value={formData.custom_subject}
+                  onChange={(e) => setFormData({ ...formData, custom_subject: e.target.value })}
+                  className="w-full mt-2 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-medium text-sm"
+                />
+              )}
+            </div>
+          </div>
+
+          {/* Category */}
+          <div className="space-y-2.5">
+            <label className="text-sm font-bold text-slate-700">Danh mục phân loại</label>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {categories.map((cat) => {
+                const Icon = cat.icon;
+                return (
+                  <button
+                    key={cat.id}
+                    type="button"
+                    onClick={() => setFormData({ ...formData, category_id: cat.id })}
+                    className={`py-3.5 px-3 rounded-2xl border-2 transition-all flex flex-col items-center gap-2 font-bold text-xs ${
+                      formData.category_id === cat.id
+                        ? 'border-slate-900 bg-slate-900 text-white shadow-md'
+                        : 'border-slate-100 bg-slate-50 text-slate-500 hover:border-slate-200'
+                    }`}
+                  >
+                    <Icon size={20} />
+                    {cat.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Gift vs Sell & Condition */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-2.5">
+              <label className="text-sm font-bold text-slate-700">Tình trạng thực tế</label>
+              <select
+                value={formData.condition_level}
+                onChange={(e) => setFormData({ ...formData, condition_level: e.target.value as ConditionLevel })}
+                className="w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-slate-900 outline-none font-semibold"
+              >
+                <option value="new_99">Mới 95–99% (Như mới, chưa viết vẽ)</option>
+                <option value="used_good">Tốt 80–90% (Đủ trang, bìa đẹp)</option>
+                <option value="used_acceptable">Khá 60–75% (Có ghi chú / highlight ôn thi)</option>
               </select>
             </div>
 
-            <div className="space-y-3">
-              <label className="text-sm font-bold text-slate-700">Giá (VND) - Để 0 nếu miễn phí</label>
-              <div className="relative">
-                <input
-                  type="number"
-                  min="0"
-                  step="1000"
-                  value={formData.price}
-                  onChange={(e) => setFormData({ ...formData, price: parseInt(e.target.value) || 0 })}
-                  className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-slate-900 outline-none transition-all font-bold"
-                />
-                <span className="absolute right-5 top-1/2 -translate-y-1/2 font-bold text-slate-400">VND</span>
+            <div className="space-y-2.5">
+              <label className="text-sm font-bold text-slate-700">Hình thức chuyển nhượng</label>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setFormData({ ...formData, item_type: 'gift', price: 0 })}
+                  className={`py-3.5 px-3 rounded-2xl border-2 font-bold text-xs flex items-center justify-center gap-1.5 transition-all ${
+                    formData.item_type === 'gift'
+                      ? 'border-emerald-600 bg-emerald-600 text-white'
+                      : 'border-slate-200 bg-slate-50 text-slate-600'
+                  }`}
+                >
+                  <Gift size={16} /> Tặng 0 đồng
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setFormData({ ...formData, item_type: 'sell', price: formData.price > 0 ? formData.price : 20000 })
+                  }
+                  className={`py-3.5 px-3 rounded-2xl border-2 font-bold text-xs flex items-center justify-center gap-1.5 transition-all ${
+                    formData.item_type === 'sell'
+                      ? 'border-slate-900 bg-slate-900 text-white'
+                      : 'border-slate-200 bg-slate-50 text-slate-600'
+                  }`}
+                >
+                  <Coins size={16} /> Giá tượng trưng
+                </button>
               </div>
             </div>
           </div>
 
-          <div className="space-y-3">
-            <label className="text-sm font-bold text-slate-700">Mô tả chi tiết</label>
+          {formData.item_type === 'sell' && (
+            <div className="space-y-2">
+              <label className="text-sm font-bold text-slate-700">Mức giá tượng trưng (VND)</label>
+              <div className="relative">
+                <input
+                  required
+                  type="number"
+                  min={1000}
+                  step={1000}
+                  value={formData.price}
+                  onChange={(e) => setFormData({ ...formData, price: parseInt(e.target.value, 10) || 0 })}
+                  className="w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-slate-900 outline-none font-bold"
+                />
+                <span className="absolute right-4 top-1/2 -translate-y-1/2 font-bold text-slate-400">VND</span>
+              </div>
+            </div>
+          )}
+
+          <div className="space-y-2.5">
+            <label className="text-sm font-bold text-slate-700">Mô tả chi tiết tình trạng</label>
             <textarea
-              rows={4}
-              placeholder="Ghi chú về tình trạng, nội dung sách, hoặc các lưu ý khác..."
+              required
+              maxLength={1000}
+              rows={3}
+              placeholder="VD: Sách xuất bản 2024, đã bọc nilon, có ghi chú công thức quan trọng ở chương 3..."
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-slate-900 outline-none transition-all font-medium resize-none"
+              className="w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-slate-900 outline-none font-medium resize-none"
             />
           </div>
 
-          <div className="pt-6">
-            <button
-              disabled={loading}
-              type="submit"
-              className="w-full bg-slate-900 text-white py-5 rounded-2xl font-bold text-lg hover:bg-slate-800 transition-all shadow-xl shadow-slate-200 flex items-center justify-center gap-3 disabled:opacity-50"
-            >
-              {loading ? (
-                <div className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              ) : (
-                'Đăng tin ngay'
-              )}
-            </button>
-          </div>
+          <button
+            disabled={loading}
+            type="submit"
+            className="w-full bg-slate-900 text-white py-4 rounded-2xl font-bold text-base hover:bg-slate-800 transition-all shadow-xl shadow-slate-200 flex items-center justify-center gap-2 disabled:opacity-50"
+          >
+            {loading ? (
+              <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+            ) : (
+              <>
+                <CheckCircle2 size={20} />
+                Gửi đăng tin vật phẩm
+              </>
+            )}
+          </button>
         </form>
       </div>
     </div>

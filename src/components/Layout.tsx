@@ -1,19 +1,19 @@
 import React from 'react';
 import { useAuth } from '../lib/FirebaseProvider';
-import { 
-  Library, 
-  PlusCircle, 
-  History, 
-  Settings, 
-  LogOut, 
+import {
+  Library,
+  PlusCircle,
+  History,
+  LogOut,
   LayoutDashboard,
   ShieldCheck,
   Menu,
-  X
+  Award,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
 import { LoginModal } from './LoginModal';
+import { ProfileModal } from './ProfileModal';
 
 interface SidebarItemProps {
   icon: React.ElementType;
@@ -26,10 +26,10 @@ const SidebarItem = ({ icon: Icon, label, active, onClick }: SidebarItemProps) =
   <button
     onClick={onClick}
     className={cn(
-      "flex items-center gap-3 w-full px-4 py-3 rounded-lg transition-all duration-200",
-      active 
-        ? "bg-slate-900 text-white shadow-md" 
-        : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+      'flex items-center gap-3 w-full px-4 py-3 rounded-lg transition-all duration-200',
+      active
+        ? 'bg-slate-900 text-white shadow-md'
+        : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
     )}
   >
     <Icon size={20} />
@@ -37,28 +37,30 @@ const SidebarItem = ({ icon: Icon, label, active, onClick }: SidebarItemProps) =
   </button>
 );
 
-export const Layout: React.FC<{ 
-  children: React.ReactNode, 
-  activeTab: string, 
-  setActiveTab: (tab: string) => void 
+export const Layout: React.FC<{
+  children: React.ReactNode;
+  activeTab: string;
+  setActiveTab: (tab: string) => void;
 }> = ({ children, activeTab, setActiveTab }) => {
   const { user, profile, logout } = useAuth();
   const [isSidebarOpen, setIsSidebarOpen] = React.useState(false);
   const [isLoginModalOpen, setIsLoginModalOpen] = React.useState(false);
+  const [isProfileModalOpen, setIsProfileModalOpen] = React.useState(false);
 
   const navigation = [
     { id: 'marketplace', label: 'Sàn trao đổi', icon: Library },
     { id: 'my-items', label: 'Đồ của tôi', icon: LayoutDashboard },
-    { id: 'my-holds', label: 'Lịch hẹn', icon: History },
+    { id: 'my-holds', label: 'Lịch hẹn & Giao dịch', icon: History },
   ];
 
   if (profile?.role === 'admin') {
-    navigation.push({ id: 'admin', label: 'Quản trị', icon: ShieldCheck });
+    navigation.push({ id: 'admin', label: 'Quản trị & Duyệt bài', icon: ShieldCheck });
   }
+
+  const trustScore = profile?.current_trust_score ?? 100;
 
   return (
     <div className="flex h-screen bg-slate-50 overflow-hidden font-sans">
-      {/* Mobile Sidebar Overlay */}
       <AnimatePresence>
         {isSidebarOpen && (
           <motion.div
@@ -71,11 +73,10 @@ export const Layout: React.FC<{
         )}
       </AnimatePresence>
 
-      {/* Sidebar */}
       <motion.aside
         className={cn(
-          "fixed inset-y-0 left-0 w-72 bg-white border-r border-slate-200 z-50 flex flex-col lg:relative lg:translate-x-0 transition-transform duration-300",
-          !isSidebarOpen && "-translate-x-full"
+          'fixed inset-y-0 left-0 w-72 bg-white border-r border-slate-200 z-50 flex flex-col lg:relative lg:translate-x-0 transition-transform duration-300',
+          !isSidebarOpen && '-translate-x-full'
         )}
       >
         <div className="p-6">
@@ -85,7 +86,7 @@ export const Layout: React.FC<{
             </div>
             <div>
               <h1 className="text-xl font-bold tracking-tight text-slate-900 leading-tight">UniExchange</h1>
-              <p className="text-xs text-slate-500 font-medium">Hệ thống thư viện mở</p>
+              <p className="text-xs text-slate-500 font-medium">Thư viện & Sàn trao đổi mở</p>
             </div>
           </div>
 
@@ -107,20 +108,39 @@ export const Layout: React.FC<{
 
         <div className="mt-auto p-6 border-t border-slate-100">
           {user ? (
-            <div className="space-y-4">
-              <div className="flex items-center gap-3 p-2">
-                {profile?.photoURL ? (
-                  <img src={profile.photoURL} className="w-10 h-10 rounded-full border border-slate-200" alt="Avatar" />
+            <div className="space-y-3">
+              <button
+                type="button"
+                onClick={() => setIsProfileModalOpen(true)}
+                className="flex items-center gap-3 p-2.5 w-full text-left rounded-xl hover:bg-slate-50 border border-transparent hover:border-slate-200 transition-all"
+              >
+                {profile?.avatar_url ? (
+                  <img src={profile.avatar_url} className="w-10 h-10 rounded-full border border-slate-200" alt="Avatar" />
                 ) : (
-                  <div className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center text-slate-500 font-bold">
-                    {profile?.displayName?.[0] || 'U'}
+                  <div className="w-10 h-10 rounded-full bg-slate-900 text-white flex items-center justify-center font-bold">
+                    {profile?.full_name?.[0] || 'S'}
                   </div>
                 )}
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-slate-900 truncate">{profile?.displayName}</p>
-                  <p className="text-xs text-slate-500 font-medium">Tín nhiệm: {profile?.trustScore || 100}</p>
+                  <p className="text-sm font-bold text-slate-900 truncate">{profile?.full_name || 'Sinh viên'}</p>
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    <span className="text-[11px] font-bold text-slate-400 uppercase">{profile?.student_id_code}</span>
+                    <span className="text-slate-300">·</span>
+                    <span
+                      className={cn(
+                        'text-xs font-extrabold flex items-center gap-0.5',
+                        trustScore >= 80
+                          ? 'text-emerald-600'
+                          : trustScore >= 50
+                          ? 'text-amber-600'
+                          : 'text-red-600'
+                      )}
+                    >
+                      <Award size={12} /> {trustScore}đ
+                    </span>
+                  </div>
                 </div>
-              </div>
+              </button>
               <button
                 onClick={logout}
                 className="flex items-center gap-3 w-full px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 rounded-lg transition-colors"
@@ -134,34 +154,37 @@ export const Layout: React.FC<{
               onClick={() => setIsLoginModalOpen(true)}
               className="w-full bg-slate-900 text-white py-3 rounded-xl font-semibold hover:bg-slate-800 transition-all shadow-lg shadow-slate-200"
             >
-              Đăng nhập
+              Đăng nhập Sinh viên
             </button>
           )}
         </div>
       </motion.aside>
 
       <LoginModal isOpen={isLoginModalOpen} onClose={() => setIsLoginModalOpen(false)} />
+      <ProfileModal isOpen={isProfileModalOpen} onClose={() => setIsProfileModalOpen(false)} />
 
-      {/* Main Content */}
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        {/* Header */}
         <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6 shrink-0">
           <div className="flex items-center gap-4">
-            <button 
+            <button
               onClick={() => setIsSidebarOpen(true)}
               className="p-2 -ml-2 text-slate-600 lg:hidden hover:bg-slate-100 rounded-lg"
             >
               <Menu size={20} />
             </button>
             <div className="flex items-center gap-2 text-sm text-slate-500 font-medium">
-              <span>Hệ thống</span>
+              <span>UniExchange</span>
               <span className="text-slate-300">/</span>
-              <span className="text-slate-900 font-semibold">{navigation.find(n => n.id === activeTab)?.label}</span>
+              <span className="text-slate-900 font-semibold">
+                {activeTab === 'post'
+                  ? 'Đăng tin vật phẩm'
+                  : navigation.find((n) => n.id === activeTab)?.label}
+              </span>
             </div>
           </div>
 
-          <div className="flex items-center gap-4">
-            {activeTab === 'marketplace' && user && (
+          <div className="flex items-center gap-3">
+            {user && activeTab !== 'post' && (
               <button
                 onClick={() => setActiveTab('post')}
                 className="flex items-center gap-2 bg-slate-900 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-slate-800 transition-all shadow-md shadow-slate-100"
@@ -173,11 +196,8 @@ export const Layout: React.FC<{
           </div>
         </header>
 
-        {/* Content Area */}
         <div className="flex-1 overflow-y-auto p-6 lg:p-8">
-          <div className="max-w-7xl mx-auto">
-            {children}
-          </div>
+          <div className="max-w-7xl mx-auto">{children}</div>
         </div>
       </main>
     </div>

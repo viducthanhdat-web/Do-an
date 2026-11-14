@@ -1,15 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../lib/FirebaseProvider';
-import { X, Mail, Phone, Lock, User as UserIcon, LogIn, ChevronRight, AlertCircle, ShieldCheck } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
-import { cn } from '../lib/utils';
+import { X, Mail, Phone, Lock, User as UserIcon, AlertCircle, ShieldCheck, Hash } from 'lucide-react';
+import { motion } from 'motion/react';
 
 export const LoginModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen, onClose }) => {
   const { signInWithGoogle, signInWithEmail, signUpWithEmail, setupRecaptcha, signInWithPhone } = useAuth();
   const [mode, setMode] = useState<'login' | 'signup' | 'phone'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [name, setName] = useState('');
+  const [fullName, setFullName] = useState('');
+  const [studentIdCode, setStudentIdCode] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState('');
   const [phone, setPhone] = useState('');
   const [otp, setOtp] = useState('');
   const [confirmationResult, setConfirmationResult] = useState<any>(null);
@@ -28,13 +29,19 @@ export const LoginModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
     setLoading(true);
     try {
       if (mode === 'signup') {
-        await signUpWithEmail(email, password, name);
+        await signUpWithEmail({
+          email,
+          password,
+          fullName,
+          studentIdCode,
+          phoneNumber,
+        });
       } else {
         await signInWithEmail(email, password);
       }
       onClose();
     } catch (err: any) {
-      setError(err.message);
+      setError(err.message || 'Đã xảy ra lỗi xác thực.');
     } finally {
       setLoading(false);
     }
@@ -79,61 +86,91 @@ export const LoginModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
         onClick={onClose}
         className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
       />
-      
+
       <motion.div
         initial={{ scale: 0.9, opacity: 0, y: 20 }}
         animate={{ scale: 1, opacity: 1, y: 0 }}
         exit={{ scale: 0.9, opacity: 0, y: 20 }}
-        className="relative bg-white w-full max-w-md rounded-[2.5rem] shadow-2xl overflow-hidden p-8 lg:p-10"
+        className="relative bg-white w-full max-w-md rounded-[2.5rem] shadow-2xl overflow-y-auto max-h-[90vh] p-8 lg:p-10"
       >
-        <button 
+        <button
           onClick={onClose}
           className="absolute top-6 right-6 p-2 text-slate-400 hover:text-slate-900 transition-colors"
         >
           <X size={20} />
         </button>
 
-        <div className="text-center mb-8">
+        <div className="text-center mb-6">
           <div className="bg-slate-900 w-12 h-12 rounded-2xl flex items-center justify-center mx-auto mb-4">
             <ShieldCheck className="text-white" size={24} />
           </div>
           <h2 className="text-2xl font-black text-slate-900 tracking-tight">
-            {mode === 'login' ? 'Chào mừng trở lại' : mode === 'signup' ? 'Tạo tài khoản mới' : 'Xác thực số điện thoại'}
+            {mode === 'login'
+              ? 'Đăng nhập Sinh viên'
+              : mode === 'signup'
+              ? 'Đăng ký Hồ sơ Sinh viên'
+              : 'Xác thực Số điện thoại'}
           </h2>
           <p className="text-slate-500 font-medium text-sm mt-1">
-            {mode === 'login' ? 'Đăng nhập để tiếp tục trao đổi' : 'Tham gia cộng đồng UniExchange ngay'}
+            {mode === 'login'
+              ? 'Sử dụng email trường (@*.edu.vn) hoặc Google'
+              : 'Khởi tạo ngay 100 điểm tín nhiệm gốc trên UniExchange'}
           </p>
         </div>
 
         {error && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-100 rounded-2xl flex items-start gap-3 text-red-600 text-sm font-medium">
-            <AlertCircle size={18} className="shrink-0" />
-            {error}
+          <div className="mb-5 p-4 bg-red-50 border border-red-100 rounded-2xl flex items-start gap-3 text-red-600 text-sm font-medium">
+            <AlertCircle size={18} className="shrink-0 mt-0.5" />
+            <span>{error}</span>
           </div>
         )}
 
         <div className="space-y-4">
           {mode !== 'phone' ? (
-            <form onSubmit={handleEmailAuth} className="space-y-4">
+            <form onSubmit={handleEmailAuth} className="space-y-3.5">
               {mode === 'signup' && (
-                <div className="relative">
-                  <UserIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                  <input
-                    required
-                    type="text"
-                    placeholder="Họ và tên"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    className="w-full pl-12 pr-4 py-3.5 bg-slate-50 border border-slate-100 rounded-2xl focus:ring-2 focus:ring-slate-900 outline-none transition-all font-medium"
-                  />
-                </div>
+                <>
+                  <div className="relative">
+                    <Hash className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                    <input
+                      required
+                      type="text"
+                      placeholder="Mã số sinh viên (VD: B21DCCN001)"
+                      value={studentIdCode}
+                      onChange={(e) => setStudentIdCode(e.target.value)}
+                      className="w-full pl-12 pr-4 py-3.5 bg-slate-50 border border-slate-100 rounded-2xl focus:ring-2 focus:ring-slate-900 outline-none transition-all font-medium uppercase"
+                    />
+                  </div>
+                  <div className="relative">
+                    <UserIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                    <input
+                      required
+                      type="text"
+                      placeholder="Họ và tên đầy đủ"
+                      value={fullName}
+                      onChange={(e) => setFullName(e.target.value)}
+                      className="w-full pl-12 pr-4 py-3.5 bg-slate-50 border border-slate-100 rounded-2xl focus:ring-2 focus:ring-slate-900 outline-none transition-all font-medium"
+                    />
+                  </div>
+                  <div className="relative">
+                    <Phone className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                    <input
+                      required
+                      type="tel"
+                      placeholder="Số điện thoại liên hệ hẹn gặp"
+                      value={phoneNumber}
+                      onChange={(e) => setPhoneNumber(e.target.value)}
+                      className="w-full pl-12 pr-4 py-3.5 bg-slate-50 border border-slate-100 rounded-2xl focus:ring-2 focus:ring-slate-900 outline-none transition-all font-medium"
+                    />
+                  </div>
+                </>
               )}
               <div className="relative">
                 <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                 <input
                   required
                   type="email"
-                  placeholder="Email của bạn"
+                  placeholder="Email sinh viên (@*.edu.vn)"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="w-full pl-12 pr-4 py-3.5 bg-slate-50 border border-slate-100 rounded-2xl focus:ring-2 focus:ring-slate-900 outline-none transition-all font-medium"
@@ -143,8 +180,9 @@ export const LoginModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
                 <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                 <input
                   required
+                  minLength={6}
                   type="password"
-                  placeholder="Mật khẩu"
+                  placeholder="Mật khẩu (tối thiểu 6 ký tự)"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="w-full pl-12 pr-4 py-3.5 bg-slate-50 border border-slate-100 rounded-2xl focus:ring-2 focus:ring-slate-900 outline-none transition-all font-medium"
@@ -155,7 +193,13 @@ export const LoginModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
                 type="submit"
                 className="w-full bg-slate-900 text-white py-4 rounded-2xl font-bold hover:bg-slate-800 transition-all shadow-lg flex items-center justify-center gap-2 disabled:opacity-50"
               >
-                {loading ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : (mode === 'login' ? 'Đăng nhập' : 'Đăng ký ngay')}
+                {loading ? (
+                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                ) : mode === 'login' ? (
+                  'Đăng nhập'
+                ) : (
+                  'Tạo hồ sơ sinh viên'
+                )}
               </button>
             </form>
           ) : (
@@ -207,7 +251,7 @@ export const LoginModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
             </div>
           )}
 
-          <div className="relative my-8">
+          <div className="relative my-6">
             <div className="absolute inset-0 flex items-center">
               <div className="w-full border-t border-slate-100"></div>
             </div>
@@ -216,41 +260,43 @@ export const LoginModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
             </div>
           </div>
 
-          <div className="space-y-3">
+          <div className="space-y-2.5">
             <button
+              type="button"
               onClick={() => signInWithGoogle().then(onClose)}
               className="w-full bg-white border border-slate-200 text-slate-700 py-3.5 rounded-2xl font-bold hover:bg-slate-50 transition-all flex items-center justify-center gap-3"
             >
               <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-5 h-5" alt="Google" />
               Tiếp tục với Google
             </button>
-            
-            {mode !== 'phone' && (
-              <button
-                onClick={() => setMode('phone')}
-                className="w-full bg-slate-50 text-slate-600 py-3.5 rounded-2xl font-bold hover:bg-slate-100 transition-all flex items-center justify-center gap-3"
-              >
-                <Phone size={18} />
-                Sử dụng Số điện thoại
-              </button>
-            )}
 
-            {mode === 'phone' && (
+            {mode !== 'phone' ? (
               <button
-                onClick={() => setMode('login')}
-                className="w-full bg-slate-50 text-slate-600 py-3.5 rounded-2xl font-bold hover:bg-slate-100 transition-all flex items-center justify-center gap-3"
+                type="button"
+                onClick={() => setMode('phone')}
+                className="w-full bg-slate-50 text-slate-600 py-3 rounded-2xl font-bold hover:bg-slate-100 transition-all flex items-center justify-center gap-3 text-sm"
               >
-                <Mail size={18} />
-                Sử dụng Email
+                <Phone size={16} />
+                Đăng nhập bằng Số điện thoại
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setMode('login')}
+                className="w-full bg-slate-50 text-slate-600 py-3 rounded-2xl font-bold hover:bg-slate-100 transition-all flex items-center justify-center gap-3 text-sm"
+              >
+                <Mail size={16} />
+                Sử dụng Email sinh viên
               </button>
             )}
           </div>
         </div>
 
-        <div className="mt-8 text-center">
+        <div className="mt-6 text-center">
           <p className="text-slate-500 text-sm font-medium">
             {mode === 'login' ? 'Chưa có tài khoản?' : 'Đã có tài khoản?'}
             <button
+              type="button"
               onClick={() => setMode(mode === 'login' ? 'signup' : 'login')}
               className="ml-2 text-slate-900 font-bold hover:underline"
             >

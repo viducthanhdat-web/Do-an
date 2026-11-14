@@ -2,70 +2,197 @@
   "entities": {
     "User": {
       "title": "User",
-      "description": "Represents a student or admin in the system.",
+      "description": "Hồ sơ sinh viên hoặc quản trị viên trong hệ thống UniExchange.",
       "type": "object",
       "properties": {
-        "uid": { "type": "string", "description": "The unique Firebase Auth UID." },
-        "displayName": { "type": "string", "description": "User's full name." },
+        "uid": { "type": "string" },
+        "student_id_code": { "type": "string", "maxLength": 50 },
         "email": { "type": "string", "format": "email" },
-        "phoneNumber": { "type": "string" },
-        "role": { "type": "string", "enum": ["user", "admin"] },
-        "trustScore": { "type": "number", "description": "Reputation score (0-100)." },
-        "photoURL": { "type": "string" }
+        "full_name": { "type": "string", "maxLength": 100 },
+        "phone_number": { "type": "string", "maxLength": 30 },
+        "avatar_url": { "type": "string" },
+        "role": { "type": "string", "enum": ["student", "admin"] },
+        "current_trust_score": { "type": "integer", "minimum": 0, "maximum": 200 },
+        "status": { "type": "string", "enum": ["active", "locked", "suspended", "banned", "disabled"] },
+        "hold_locked_until": { "type": ["string", "null"], "format": "date-time" },
+        "created_at": { "type": "string", "format": "date-time" },
+        "updated_at": { "type": "string", "format": "date-time" }
       },
-      "required": ["uid", "role"]
+      "required": ["student_id_code", "email", "full_name", "phone_number", "role", "current_trust_score", "status", "created_at", "updated_at"]
+    },
+    "TrustHistory": {
+      "title": "TrustHistory",
+      "description": "Sổ cái bất biến (Append-only) ghi nhận lịch sử cộng/trừ điểm tín nhiệm.",
+      "type": "object",
+      "properties": {
+        "score_change": { "type": "integer" },
+        "balance_after": { "type": "integer", "minimum": 0 },
+        "event_type": { "type": "string", "enum": ["INIT", "COMPLETE_TX", "CANCEL_HOLD", "EXPIRED_HOLD", "NO_SHOW", "ADMIN_ADJUST", "LOCK_HOLD"] },
+        "reference_id": { "type": ["string", "null"] },
+        "description": { "type": "string", "maxLength": 500 },
+        "created_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["score_change", "balance_after", "event_type", "description", "created_at"]
+    },
+    "Category": {
+      "title": "Category",
+      "description": "Danh mục vật phẩm học tập.",
+      "type": "object",
+      "properties": {
+        "category_name": { "type": "string", "maxLength": 100 },
+        "description": { "type": "string", "maxLength": 500 },
+        "display_order": { "type": "number" },
+        "is_active": { "type": "boolean" }
+      },
+      "required": ["category_name", "is_active"]
+    },
+    "Subject": {
+      "title": "Subject",
+      "description": "Danh mục mã học phần theo chương trình đào tạo.",
+      "type": "object",
+      "properties": {
+        "subject_code": { "type": "string", "maxLength": 50 },
+        "subject_name": { "type": "string", "maxLength": 200 },
+        "faculty": { "type": "string", "maxLength": 200 },
+        "is_active": { "type": "boolean" }
+      },
+      "required": ["subject_code", "subject_name", "is_active"]
+    },
+    "MeetupLocation": {
+      "title": "MeetupLocation",
+      "description": "Điểm hẹn giao nhận an toàn trong khuôn viên trường.",
+      "type": "object",
+      "properties": {
+        "location_name": { "type": "string", "maxLength": 200 },
+        "campus": { "type": "string", "maxLength": 200 },
+        "landmark_description": { "type": "string", "maxLength": 500 },
+        "is_active": { "type": "boolean" }
+      },
+      "required": ["location_name", "is_active"]
     },
     "Item": {
       "title": "Item",
-      "description": "A textbook or piece of equipment listed for exchange.",
+      "description": "Bài đăng giáo trình hoặc thiết bị học tập cũ.",
       "type": "object",
       "properties": {
-        "id": { "type": "string" },
+        "seller_id": { "type": "string" },
+        "seller_summary": { "type": "object" },
+        "category_id": { "type": "string" },
+        "subject_id": { "type": ["string", "null"] },
+        "subject_name": { "type": ["string", "null"] },
         "title": { "type": "string", "maxLength": 100 },
-        "description": { "type": "string", "maxLength": 500 },
-        "category": { "type": "string", "enum": ["Textbook", "Equipment", "Note", "Other"] },
-        "subject": { "type": "string", "maxLength": 100 },
-        "condition": { "type": "string", "maxLength": 50 },
-        "price": { "type": "number", "description": "Price in VND (0 for donation)." },
-        "sellerId": { "type": "string" },
-        "sellerName": { "type": "string" },
-        "status": { "type": "string", "enum": ["available", "held", "exchanged"] },
-        "imageUrl": { "type": "string" },
-        "createdAt": { "type": "string", "format": "date-time" },
-        "updatedAt": { "type": "string", "format": "date-time" }
+        "description": { "type": "string", "maxLength": 1000 },
+        "item_type": { "type": "string", "enum": ["gift", "sell"] },
+        "price": { "type": "number", "minimum": 0 },
+        "condition_level": { "type": "string", "enum": ["new_99", "used_good", "used_acceptable"] },
+        "image_urls": { "type": "array", "items": { "type": "string" }, "maxItems": 10 },
+        "primary_image": { "type": ["string", "null"] },
+        "item_status": { "type": "string", "enum": ["available", "held", "completed", "hidden"] },
+        "active_hold_id": { "type": ["string", "null"] },
+        "moderation_status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
+        "reject_reason": { "type": ["string", "null"] },
+        "created_at": { "type": "string", "format": "date-time" },
+        "updated_at": { "type": "string", "format": "date-time" }
       },
-      "required": ["title", "category", "sellerId", "status", "createdAt"]
+      "required": ["seller_id", "seller_summary", "category_id", "title", "description", "item_type", "price", "condition_level", "image_urls", "primary_image", "item_status", "moderation_status", "created_at", "updated_at"]
+    },
+    "ModerationLog": {
+      "title": "ModerationLog",
+      "description": "Nhật ký kiểm duyệt bài đăng của Admin.",
+      "type": "object",
+      "properties": {
+        "admin_id": { "type": "string" },
+        "action": { "type": "string", "enum": ["approve", "reject", "hide"] },
+        "reason": { "type": ["string", "null"] },
+        "created_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["admin_id", "action", "created_at"]
     },
     "Hold": {
       "title": "Hold",
-      "description": "A temporary reservation of an item.",
+      "description": "Phiên đặt giữ chỗ độc quyền 24–48 giờ cho một vật phẩm.",
       "type": "object",
       "properties": {
-        "id": { "type": "string" },
-        "itemId": { "type": "string" },
-        "requesterId": { "type": "string" },
-        "requesterName": { "type": "string" },
-        "sellerId": { "type": "string" },
-        "expiresAt": { "type": "string", "format": "date-time" },
-        "meetupPoint": { "type": "string", "maxLength": 100 },
-        "status": { "type": "string", "enum": ["active", "completed", "cancelled", "expired"] },
-        "createdAt": { "type": "string", "format": "date-time" }
+        "item_id": { "type": "string" },
+        "item_title": { "type": "string", "maxLength": 100 },
+        "primary_image": { "type": ["string", "null"] },
+        "seller_id": { "type": "string" },
+        "seller_summary": { "type": ["object", "null"] },
+        "requester_id": { "type": "string" },
+        "requester_summary": { "type": ["object", "null"] },
+        "meetup_summary": { "type": ["object", "null"] },
+        "hold_start_time": { "type": "string", "format": "date-time" },
+        "hold_expires_at": { "type": "string", "format": "date-time" },
+        "hold_status": { "type": "string", "enum": ["active", "cancelled", "converted", "expired"] },
+        "cancel_reason": { "type": ["string", "null"] },
+        "created_at": { "type": "string", "format": "date-time" },
+        "updated_at": { "type": "string", "format": "date-time" }
       },
-      "required": ["itemId", "requesterId", "sellerId", "expiresAt", "status", "createdAt"]
+      "required": ["item_id", "item_title", "seller_id", "requester_id", "hold_start_time", "hold_expires_at", "hold_status", "created_at", "updated_at"]
+    },
+    "Meetup": {
+      "title": "Meetup",
+      "description": "Thỏa thuận địa điểm và thời gian hẹn gặp nội khu.",
+      "type": "object",
+      "properties": {
+        "hold_id": { "type": "string" },
+        "item_id": { "type": "string" },
+        "seller_id": { "type": "string" },
+        "buyer_id": { "type": "string" },
+        "location_id": { "type": ["string", "null"] },
+        "location_name": { "type": "string", "maxLength": 200 },
+        "proposed_time": { "type": "string", "format": "date-time" },
+        "status": { "type": "string", "enum": ["proposed", "confirmed", "rescheduled", "cancelled", "completed"] },
+        "note": { "type": ["string", "null"] },
+        "created_at": { "type": "string", "format": "date-time" },
+        "updated_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["hold_id", "item_id", "seller_id", "buyer_id", "location_name", "proposed_time", "status", "created_at", "updated_at"]
+    },
+    "Transaction": {
+      "title": "Transaction",
+      "description": "Biên bản giao dịch trao đổi hoàn tất hoặc tranh chấp.",
+      "type": "object",
+      "properties": {
+        "item_id": { "type": "string" },
+        "item_title": { "type": ["string", "null"] },
+        "hold_id": { "type": "string" },
+        "seller_id": { "type": "string" },
+        "buyer_id": { "type": "string" },
+        "final_amount": { "type": "number", "minimum": 0 },
+        "payment_method": { "type": "string", "enum": ["cash", "bank_transfer", "free"] },
+        "current_status": { "type": "string", "enum": ["pending", "completed", "disputed", "cancelled"] },
+        "completed_at": { "type": ["string", "null"], "format": "date-time" },
+        "created_at": { "type": "string", "format": "date-time" },
+        "updated_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["item_id", "hold_id", "seller_id", "buyer_id", "final_amount", "payment_method", "current_status", "created_at", "updated_at"]
+    },
+    "TransactionStatusLog": {
+      "title": "TransactionStatusLog",
+      "description": "Nhật ký chuyển đổi trạng thái giao dịch bất biến.",
+      "type": "object",
+      "properties": {
+        "from_status": { "type": ["string", "null"] },
+        "to_status": { "type": "string" },
+        "changed_by": { "type": "string" },
+        "reason": { "type": ["string", "null"] },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["to_status", "changed_by", "timestamp"]
     }
   },
   "firestore": {
-    "/users/{userId}": {
-      "schema": "User",
-      "description": "Public and private user profile data."
-    },
-    "/items/{itemId}": {
-      "schema": "Item",
-      "description": "Textbooks and equipment available for exchange."
-    },
-    "/holds/{holdId}": {
-      "schema": "Hold",
-      "description": "Active and past item reservations."
-    }
+    "/users/{userId}": { "schema": "User", "description": "Hồ sơ sinh viên và quản trị viên." },
+    "/users/{userId}/trust_history/{logId}": { "schema": "TrustHistory", "description": "Sổ cái lịch sử điểm tín nhiệm bất biến." },
+    "/categories/{categoryId}": { "schema": "Category", "description": "Danh mục phân loại học liệu." },
+    "/subjects/{subjectId}": { "schema": "Subject", "description": "Danh mục môn học đào tạo." },
+    "/meetup_locations/{locationId}": { "schema": "MeetupLocation", "description": "Điểm hẹn an toàn trong trường." },
+    "/items/{itemId}": { "schema": "Item", "description": "Danh sách giáo trình và thiết bị cũ." },
+    "/items/{itemId}/moderation_logs/{modLogId}": { "schema": "ModerationLog", "description": "Nhật ký kiểm duyệt của Admin." },
+    "/holds/{holdId}": { "schema": "Hold", "description": "Phiên đặt giữ chỗ 24–48 giờ." },
+    "/meetups/{meetupId}": { "schema": "Meetup", "description": "Lịch hẹn gặp mặt nội khu." },
+    "/transactions/{txId}": { "schema": "Transaction", "description": "Biên bản giao dịch trao đổi." },
+    "/transactions/{txId}/status_logs/{logId}": { "schema": "TransactionStatusLog", "description": "Nhật ký trạng thái giao dịch." }
   }
 }

@@ -1,360 +1,396 @@
 <mxfile host="app.diagrams.net">
-  <diagram name="ERD - He Thong Trao Doi Giao Trinh" id="CwpxBvDgIOpu3oyU4C30">
-    <mxGraphModel dx="1776" dy="1059" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+  <diagram name="1. Firestore Physical Schema (NoSQL)" id="FirestorePhysicalSchema">
+    <mxGraphModel dx="1776" dy="1059" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1654" pageHeight="1169" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
-        <mxCell id="KyNEBrln-fPtM6UWV395-1" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=20;fontStyle=1;fontColor=#1E293B;" value="HE THONG TRAO DOI GIAO TRINH &amp;amp; THIET BI CU TRONG TRUONG HOC&amp;nbsp;" vertex="1">
-          <mxGeometry height="40" width="900" x="450" y="20" as="geometry" />
+        <mxCell id="fs_title" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=20;fontStyle=1;fontColor=#0F172A;" value="LƯỢC ĐỒ VẬT LÝ CLOUD FIRESTORE (HYBRID COLLECTIONS &amp; SUBCOLLECTIONS) - UNIEXCHANGE" vertex="1">
+          <mxGeometry height="40" width="1100" x="260" y="20" as="geometry" />
         </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-2" parent="1" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=30;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;whiteSpace=wrap;html=1;fontSize=14;fillColor=none;" value="USERS" vertex="1">
-          <mxGeometry height="290" width="280" x="80" y="100" as="geometry" />
+        <mxCell id="fs_users" parent="1" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=32;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;whiteSpace=wrap;html=1;fontSize=13;fillColor=#F8FAFC;strokeColor=#0F172A;" value="/users/{userId} [Root Collection]" vertex="1">
+          <mxGeometry height="344" width="320" x="60" y="90" as="geometry" />
         </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-3" parent="KyNEBrln-fPtM6UWV395-2" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=12;fontStyle=1;" value="+ user_id : BIGINT [PK]" vertex="1">
+        <mxCell id="fs_u1" parent="fs_users" style="text;align=left;spacingLeft=8;fontSize=12;fontStyle=1;" value="PK docId : String (= Firebase Auth UID)" vertex="1">
+          <mxGeometry height="26" width="320" y="32" as="geometry" />
+        </mxCell>
+        <mxCell id="fs_u2" parent="fs_users" style="text;align=left;spacingLeft=8;fontSize=12;" value="+ student_id_code : String (VD: B21DCCN001)" vertex="1">
+          <mxGeometry height="26" width="320" y="58" as="geometry" />
+        </mxCell>
+        <mxCell id="fs_u3" parent="fs_users" style="text;align=left;spacingLeft=8;fontSize=12;" value="+ email : String (@*.edu.vn)" vertex="1">
+          <mxGeometry height="26" width="320" y="84" as="geometry" />
+        </mxCell>
+        <mxCell id="fs_u4" parent="fs_users" style="text;align=left;spacingLeft=8;fontSize=12;" value="+ full_name : String" vertex="1">
+          <mxGeometry height="26" width="320" y="110" as="geometry" />
+        </mxCell>
+        <mxCell id="fs_u5" parent="fs_users" style="text;align=left;spacingLeft=8;fontSize=12;" value="+ phone_number : String" vertex="1">
+          <mxGeometry height="26" width="320" y="136" as="geometry" />
+        </mxCell>
+        <mxCell id="fs_u6" parent="fs_users" style="text;align=left;spacingLeft=8;fontSize=12;" value="+ avatar_url : String" vertex="1">
+          <mxGeometry height="26" width="320" y="162" as="geometry" />
+        </mxCell>
+        <mxCell id="fs_u7" parent="fs_users" style="text;align=left;spacingLeft=8;fontSize=12;" value="+ role : String ('student' | 'admin')" vertex="1">
+          <mxGeometry height="26" width="320" y="188" as="geometry" />
+        </mxCell>
+        <mxCell id="fs_u8" parent="fs_users" style="text;align=left;spacingLeft=8;fontSize=12;fontStyle=1;fontColor=#047857;" value="+ current_trust_score : Number (Init: 100)" vertex="1">
+          <mxGeometry height="26" width="320" y="214" as="geometry" />
+        </mxCell>
+        <mxCell id="fs_u9" parent="fs_users" style="text;align=left;spacingLeft=8;fontSize=12;" value="+ status : String ('active'|'suspended'|'banned')" vertex="1">
+          <mxGeometry height="26" width="320" y="240" as="geometry" />
+        </mxCell>
+        <mxCell id="fs_u10" parent="fs_users" style="text;align=left;spacingLeft=8;fontSize=12;" value="+ hold_locked_until : Timestamp | null" vertex="1">
+          <mxGeometry height="26" width="320" y="266" as="geometry" />
+        </mxCell>
+        <mxCell id="fs_u11" parent="fs_users" style="text;align=left;spacingLeft=8;fontSize=12;" value="+ created_at, updated_at : Timestamp" vertex="1">
+          <mxGeometry height="26" width="320" y="292" as="geometry" />
+        </mxCell>
+        <mxCell id="fs_u12" parent="fs_users" style="text;align=left;spacingLeft=8;fontSize=11;fontStyle=2;fontColor=#64748B;" value="(Auth Password do Firebase Auth quản lý)" vertex="1">
+          <mxGeometry height="26" width="320" y="318" as="geometry" />
+        </mxCell>
+
+        <mxCell id="fs_trust" parent="1" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=32;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;whiteSpace=wrap;html=1;fontSize=13;fillColor=#F3E8FF;strokeColor=#7E22CE;" value="/users/{userId}/trust_history/{logId} [Subcollection]" vertex="1">
+          <mxGeometry height="214" width="320" x="60" y="490" as="geometry" />
+        </mxCell>
+        <mxCell id="fs_th1" parent="fs_trust" style="text;align=left;spacingLeft=8;fontSize=12;fontStyle=1;" value="PK logId : String (Auto UUID - Append Only)" vertex="1">
+          <mxGeometry height="26" width="320" y="32" as="geometry" />
+        </mxCell>
+        <mxCell id="fs_th2" parent="fs_trust" style="text;align=left;spacingLeft=8;fontSize=12;" value="+ score_change : Number (+5, -10, -30)" vertex="1">
+          <mxGeometry height="26" width="320" y="58" as="geometry" />
+        </mxCell>
+        <mxCell id="fs_th3" parent="fs_trust" style="text;align=left;spacingLeft=8;fontSize=12;fontStyle=1;" value="+ balance_after : Number (Bắt buộc)" vertex="1">
+          <mxGeometry height="26" width="320" y="84" as="geometry" />
+        </mxCell>
+        <mxCell id="fs_th4" parent="fs_trust" style="text;align=left;spacingLeft=8;fontSize=12;" value="+ event_type : String ('COMPLETE_TX','NO_SHOW'...)" vertex="1">
+          <mxGeometry height="26" width="320" y="110" as="geometry" />
+        </mxCell>
+        <mxCell id="fs_th5" parent="fs_trust" style="text;align=left;spacingLeft=8;fontSize=12;" value="+ reference_id : String | null (holdId / txId)" vertex="1">
+          <mxGeometry height="26" width="320" y="136" as="geometry" />
+        </mxCell>
+        <mxCell id="fs_th6" parent="fs_trust" style="text;align=left;spacingLeft=8;fontSize=12;" value="+ description : String" vertex="1">
+          <mxGeometry height="26" width="320" y="162" as="geometry" />
+        </mxCell>
+        <mxCell id="fs_th7" parent="fs_trust" style="text;align=left;spacingLeft=8;fontSize=12;" value="+ created_at : Timestamp" vertex="1">
+          <mxGeometry height="26" width="320" y="188" as="geometry" />
+        </mxCell>
+
+        <mxCell id="fs_cat" parent="1" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=32;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;whiteSpace=wrap;html=1;fontSize=13;fillColor=#EFF6FF;strokeColor=#1D4ED8;" value="/categories/{categoryId} [Root]" vertex="1">
+          <mxGeometry height="162" width="270" x="450" y="90" as="geometry" />
+        </mxCell>
+        <mxCell id="fs_c1" parent="fs_cat" style="text;align=left;spacingLeft=8;fontSize=12;fontStyle=1;" value="PK categoryId : String (Slug)" vertex="1">
+          <mxGeometry height="26" width="270" y="32" as="geometry" />
+        </mxCell>
+        <mxCell id="fs_c2" parent="fs_cat" style="text;align=left;spacingLeft=8;fontSize=12;" value="+ category_name : String" vertex="1">
+          <mxGeometry height="26" width="270" y="58" as="geometry" />
+        </mxCell>
+        <mxCell id="fs_c3" parent="fs_cat" style="text;align=left;spacingLeft=8;fontSize=12;" value="+ description : String" vertex="1">
+          <mxGeometry height="26" width="270" y="84" as="geometry" />
+        </mxCell>
+        <mxCell id="fs_c4" parent="fs_cat" style="text;align=left;spacingLeft=8;fontSize=12;" value="+ display_order : Number" vertex="1">
+          <mxGeometry height="26" width="270" y="110" as="geometry" />
+        </mxCell>
+        <mxCell id="fs_c5" parent="fs_cat" style="text;align=left;spacingLeft=8;fontSize=12;" value="+ is_active : Boolean" vertex="1">
+          <mxGeometry height="26" width="270" y="136" as="geometry" />
+        </mxCell>
+
+        <mxCell id="fs_sub" parent="1" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=32;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;whiteSpace=wrap;html=1;fontSize=13;fillColor=#EFF6FF;strokeColor=#1D4ED8;" value="/subjects/{subjectId} [Root]" vertex="1">
+          <mxGeometry height="162" width="270" x="450" y="280" as="geometry" />
+        </mxCell>
+        <mxCell id="fs_s1" parent="fs_sub" style="text;align=left;spacingLeft=8;fontSize=12;fontStyle=1;" value="PK subjectId : String (VD: INT1340)" vertex="1">
+          <mxGeometry height="26" width="270" y="32" as="geometry" />
+        </mxCell>
+        <mxCell id="fs_s2" parent="fs_sub" style="text;align=left;spacingLeft=8;fontSize=12;" value="+ subject_code : String" vertex="1">
+          <mxGeometry height="26" width="270" y="58" as="geometry" />
+        </mxCell>
+        <mxCell id="fs_s3" parent="fs_sub" style="text;align=left;spacingLeft=8;fontSize=12;" value="+ subject_name : String" vertex="1">
+          <mxGeometry height="26" width="270" y="84" as="geometry" />
+        </mxCell>
+        <mxCell id="fs_s4" parent="fs_sub" style="text;align=left;spacingLeft=8;fontSize=12;" value="+ faculty : String" vertex="1">
+          <mxGeometry height="26" width="270" y="110" as="geometry" />
+        </mxCell>
+        <mxCell id="fs_s5" parent="fs_sub" style="text;align=left;spacingLeft=8;fontSize=12;" value="+ is_active : Boolean" vertex="1">
+          <mxGeometry height="26" width="270" y="136" as="geometry" />
+        </mxCell>
+
+        <mxCell id="fs_items" parent="1" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=32;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;whiteSpace=wrap;html=1;fontSize=13;fillColor=#F8FAFC;strokeColor=#0F172A;" value="/items/{itemId} [Root Collection - Central]" vertex="1">
+          <mxGeometry height="448" width="360" x="800" y="90" as="geometry" />
+        </mxCell>
+        <mxCell id="fs_i1" parent="fs_items" style="text;align=left;spacingLeft=8;fontSize=12;fontStyle=1;" value="PK itemId : String (Auto UUID)" vertex="1">
+          <mxGeometry height="26" width="360" y="32" as="geometry" />
+        </mxCell>
+        <mxCell id="fs_i2" parent="fs_items" style="text;align=left;spacingLeft=8;fontSize=12;fontStyle=2;" value="REF seller_id : String -&gt; /users/{userId}" vertex="1">
+          <mxGeometry height="26" width="360" y="58" as="geometry" />
+        </mxCell>
+        <mxCell id="fs_i3" parent="fs_items" style="text;align=left;spacingLeft=8;fontSize=12;fontColor=#0369A1;" value="EMBED seller_summary : Map {full_name, trust_score, avatar_url}" vertex="1">
+          <mxGeometry height="26" width="360" y="84" as="geometry" />
+        </mxCell>
+        <mxCell id="fs_i4" parent="fs_items" style="text;align=left;spacingLeft=8;fontSize=12;fontStyle=2;" value="REF category_id : String -&gt; /categories/{categoryId}" vertex="1">
+          <mxGeometry height="26" width="360" y="110" as="geometry" />
+        </mxCell>
+        <mxCell id="fs_i5" parent="fs_items" style="text;align=left;spacingLeft=8;fontSize=12;fontStyle=2;" value="REF subject_id : String | null -&gt; /subjects/{subjectId}" vertex="1">
+          <mxGeometry height="26" width="360" y="136" as="geometry" />
+        </mxCell>
+        <mxCell id="fs_i6" parent="fs_items" style="text;align=left;spacingLeft=8;fontSize=12;" value="+ title : String (&lt;=100 chars)" vertex="1">
+          <mxGeometry height="26" width="360" y="162" as="geometry" />
+        </mxCell>
+        <mxCell id="fs_i7" parent="fs_items" style="text;align=left;spacingLeft=8;fontSize=12;" value="+ description : String" vertex="1">
+          <mxGeometry height="26" width="360" y="188" as="geometry" />
+        </mxCell>
+        <mxCell id="fs_i8" parent="fs_items" style="text;align=left;spacingLeft=8;fontSize=12;" value="+ item_type : String ('gift' | 'sell')" vertex="1">
+          <mxGeometry height="26" width="360" y="214" as="geometry" />
+        </mxCell>
+        <mxCell id="fs_i9" parent="fs_items" style="text;align=left;spacingLeft=8;fontSize=12;" value="+ price : Number (&gt;=0, 0 if gift)" vertex="1">
+          <mxGeometry height="26" width="360" y="240" as="geometry" />
+        </mxCell>
+        <mxCell id="fs_i10" parent="fs_items" style="text;align=left;spacingLeft=8;fontSize=12;" value="+ condition_level : String ('new_99'|'used_good'|'used_acceptable')" vertex="1">
+          <mxGeometry height="26" width="360" y="266" as="geometry" />
+        </mxCell>
+        <mxCell id="fs_i11" parent="fs_items" style="text;align=left;spacingLeft=8;fontSize=12;fontColor=#0369A1;" value="EMBED image_urls : Array[String] &amp; primary_image : String" vertex="1">
+          <mxGeometry height="26" width="360" y="292" as="geometry" />
+        </mxCell>
+        <mxCell id="fs_i12" parent="fs_items" style="text;align=left;spacingLeft=8;fontSize=12;fontStyle=1;" value="+ item_status : String ('available'|'held'|'completed'|'hidden')" vertex="1">
+          <mxGeometry height="26" width="360" y="318" as="geometry" />
+        </mxCell>
+        <mxCell id="fs_i13" parent="fs_items" style="text;align=left;spacingLeft=8;fontSize=12;fontStyle=1;fontColor=#B91C1C;" value="+ active_hold_id : String | null [Optimistic Lock]" vertex="1">
+          <mxGeometry height="26" width="360" y="344" as="geometry" />
+        </mxCell>
+        <mxCell id="fs_i14" parent="fs_items" style="text;align=left;spacingLeft=8;fontSize=12;" value="+ moderation_status : String ('pending'|'approved'|'rejected')" vertex="1">
+          <mxGeometry height="26" width="360" y="370" as="geometry" />
+        </mxCell>
+        <mxCell id="fs_i15" parent="fs_items" style="text;align=left;spacingLeft=8;fontSize=12;" value="+ reject_reason : String | null" vertex="1">
+          <mxGeometry height="26" width="360" y="396" as="geometry" />
+        </mxCell>
+        <mxCell id="fs_i16" parent="fs_items" style="text;align=left;spacingLeft=8;fontSize=12;" value="+ created_at, updated_at : Timestamp" vertex="1">
+          <mxGeometry height="26" width="360" y="422" as="geometry" />
+        </mxCell>
+
+        <mxCell id="fs_mod" parent="1" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=32;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;whiteSpace=wrap;html=1;fontSize=13;fillColor=#F3E8FF;strokeColor=#7E22CE;" value="/items/{itemId}/moderation_logs/{modLogId} [Sub]" vertex="1">
+          <mxGeometry height="162" width="340" x="1230" y="90" as="geometry" />
+        </mxCell>
+        <mxCell id="fs_m1" parent="fs_mod" style="text;align=left;spacingLeft=8;fontSize=12;fontStyle=1;" value="PK modLogId : String (Auto UUID)" vertex="1">
+          <mxGeometry height="26" width="340" y="32" as="geometry" />
+        </mxCell>
+        <mxCell id="fs_m2" parent="fs_mod" style="text;align=left;spacingLeft=8;fontSize=12;fontStyle=2;" value="REF admin_id : String -&gt; /users/{userId}" vertex="1">
+          <mxGeometry height="26" width="340" y="58" as="geometry" />
+        </mxCell>
+        <mxCell id="fs_m3" parent="fs_mod" style="text;align=left;spacingLeft=8;fontSize=12;" value="+ action : String ('approve' | 'reject' | 'hide')" vertex="1">
+          <mxGeometry height="26" width="340" y="84" as="geometry" />
+        </mxCell>
+        <mxCell id="fs_m4" parent="fs_mod" style="text;align=left;spacingLeft=8;fontSize=12;" value="+ reason : String" vertex="1">
+          <mxGeometry height="26" width="340" y="110" as="geometry" />
+        </mxCell>
+        <mxCell id="fs_m5" parent="fs_mod" style="text;align=left;spacingLeft=8;fontSize=12;" value="+ created_at : Timestamp" vertex="1">
+          <mxGeometry height="26" width="340" y="136" as="geometry" />
+        </mxCell>
+
+        <mxCell id="fs_holds" parent="1" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=32;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;whiteSpace=wrap;html=1;fontSize=13;fillColor=#FEF2F2;strokeColor=#B91C1C;" value="/holds/{holdId} [Root - Race Condition Protected]" vertex="1">
+          <mxGeometry height="344" width="360" x="800" y="590" as="geometry" />
+        </mxCell>
+        <mxCell id="fs_h1" parent="fs_holds" style="text;align=left;spacingLeft=8;fontSize=12;fontStyle=1;" value="PK holdId : String (Auto UUID)" vertex="1">
+          <mxGeometry height="26" width="360" y="32" as="geometry" />
+        </mxCell>
+        <mxCell id="fs_h2" parent="fs_holds" style="text;align=left;spacingLeft=8;fontSize=12;fontStyle=2;" value="REF item_id : String -&gt; /items/{itemId}" vertex="1">
+          <mxGeometry height="26" width="360" y="58" as="geometry" />
+        </mxCell>
+        <mxCell id="fs_h3" parent="fs_holds" style="text;align=left;spacingLeft=8;fontSize=12;fontColor=#0369A1;" value="EMBED item_title &amp; primary_image : String" vertex="1">
+          <mxGeometry height="26" width="360" y="84" as="geometry" />
+        </mxCell>
+        <mxCell id="fs_h4" parent="fs_holds" style="text;align=left;spacingLeft=8;fontSize=12;fontStyle=2;" value="REF seller_id, requester_id : String -&gt; /users" vertex="1">
+          <mxGeometry height="26" width="360" y="110" as="geometry" />
+        </mxCell>
+        <mxCell id="fs_h5" parent="fs_holds" style="text;align=left;spacingLeft=8;fontSize=12;fontColor=#0369A1;" value="EMBED seller_summary &amp; requester_summary : Map" vertex="1">
+          <mxGeometry height="26" width="360" y="136" as="geometry" />
+        </mxCell>
+        <mxCell id="fs_h6" parent="fs_holds" style="text;align=left;spacingLeft=8;fontSize=12;fontColor=#0369A1;" value="EMBED meetup_summary : Map {location_name, proposed_time}" vertex="1">
+          <mxGeometry height="26" width="360" y="162" as="geometry" />
+        </mxCell>
+        <mxCell id="fs_h7" parent="fs_holds" style="text;align=left;spacingLeft=8;fontSize=12;" value="+ hold_start_time : Timestamp" vertex="1">
+          <mxGeometry height="26" width="360" y="188" as="geometry" />
+        </mxCell>
+        <mxCell id="fs_h8" parent="fs_holds" style="text;align=left;spacingLeft=8;fontSize=12;fontStyle=1;fontColor=#B91C1C;" value="+ hold_expires_at : Timestamp (+24h to +48h)" vertex="1">
+          <mxGeometry height="26" width="360" y="214" as="geometry" />
+        </mxCell>
+        <mxCell id="fs_h9" parent="fs_holds" style="text;align=left;spacingLeft=8;fontSize=12;fontStyle=1;" value="+ hold_status : String ('active'|'expired'|'cancelled'|'converted')" vertex="1">
+          <mxGeometry height="26" width="360" y="240" as="geometry" />
+        </mxCell>
+        <mxCell id="fs_h10" parent="fs_holds" style="text;align=left;spacingLeft=8;fontSize=12;" value="+ cancel_reason : String | null" vertex="1">
+          <mxGeometry height="26" width="360" y="266" as="geometry" />
+        </mxCell>
+        <mxCell id="fs_h11" parent="fs_holds" style="text;align=left;spacingLeft=8;fontSize=12;" value="+ created_at, updated_at : Timestamp" vertex="1">
+          <mxGeometry height="26" width="360" y="292" as="geometry" />
+        </mxCell>
+        <mxCell id="fs_h12" parent="fs_holds" style="text;align=left;spacingLeft=8;fontSize=11;fontStyle=2;fontColor=#B91C1C;" value="Index: [hold_status ASC, hold_expires_at ASC]" vertex="1">
+          <mxGeometry height="26" width="360" y="318" as="geometry" />
+        </mxCell>
+
+        <mxCell id="fs_meetups" parent="1" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=32;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;whiteSpace=wrap;html=1;fontSize=13;fillColor=#ECFDF5;strokeColor=#047857;" value="/meetups/{meetupId} [Root Collection]" vertex="1">
+          <mxGeometry height="266" width="340" x="1230" y="310" as="geometry" />
+        </mxCell>
+        <mxCell id="fs_mt1" parent="fs_meetups" style="text;align=left;spacingLeft=8;fontSize=12;fontStyle=1;" value="PK meetupId : String (Auto UUID)" vertex="1">
+          <mxGeometry height="26" width="340" y="32" as="geometry" />
+        </mxCell>
+        <mxCell id="fs_mt2" parent="fs_meetups" style="text;align=left;spacingLeft=8;fontSize=12;fontStyle=2;" value="REF hold_id : String [1:1 -&gt; /holds/{holdId}]" vertex="1">
+          <mxGeometry height="26" width="340" y="58" as="geometry" />
+        </mxCell>
+        <mxCell id="fs_mt3" parent="fs_meetups" style="text;align=left;spacingLeft=8;fontSize=12;fontStyle=2;" value="REF item_id, seller_id, buyer_id : String" vertex="1">
+          <mxGeometry height="26" width="340" y="84" as="geometry" />
+        </mxCell>
+        <mxCell id="fs_mt4" parent="fs_meetups" style="text;align=left;spacingLeft=8;fontSize=12;fontStyle=2;" value="REF location_id : String -&gt; /meetup_locations" vertex="1">
+          <mxGeometry height="26" width="340" y="110" as="geometry" />
+        </mxCell>
+        <mxCell id="fs_mt5" parent="fs_meetups" style="text;align=left;spacingLeft=8;fontSize=12;" value="+ location_name : String (Embedded)" vertex="1">
+          <mxGeometry height="26" width="340" y="136" as="geometry" />
+        </mxCell>
+        <mxCell id="fs_mt6" parent="fs_meetups" style="text;align=left;spacingLeft=8;fontSize=12;fontStyle=1;" value="+ proposed_time : Timestamp" vertex="1">
+          <mxGeometry height="26" width="340" y="162" as="geometry" />
+        </mxCell>
+        <mxCell id="fs_mt7" parent="fs_meetups" style="text;align=left;spacingLeft=8;fontSize=12;" value="+ status : String ('proposed'|'confirmed'|'completed'...)" vertex="1">
+          <mxGeometry height="26" width="340" y="188" as="geometry" />
+        </mxCell>
+        <mxCell id="fs_mt8" parent="fs_meetups" style="text;align=left;spacingLeft=8;fontSize=12;" value="+ note : String" vertex="1">
+          <mxGeometry height="26" width="340" y="214" as="geometry" />
+        </mxCell>
+        <mxCell id="fs_mt9" parent="fs_meetups" style="text;align=left;spacingLeft=8;fontSize=12;" value="+ created_at, updated_at : Timestamp" vertex="1">
+          <mxGeometry height="26" width="340" y="240" as="geometry" />
+        </mxCell>
+
+        <mxCell id="fs_loc" parent="1" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=32;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;whiteSpace=wrap;html=1;fontSize=13;fillColor=#ECFDF5;strokeColor=#047857;" value="/meetup_locations/{locationId} [Root]" vertex="1">
+          <mxGeometry height="162" width="340" x="1230" y="620" as="geometry" />
+        </mxCell>
+        <mxCell id="fs_l1" parent="fs_loc" style="text;align=left;spacingLeft=8;fontSize=12;fontStyle=1;" value="PK locationId : String (Slug)" vertex="1">
+          <mxGeometry height="26" width="340" y="32" as="geometry" />
+        </mxCell>
+        <mxCell id="fs_l2" parent="fs_loc" style="text;align=left;spacingLeft=8;fontSize=12;" value="+ location_name : String" vertex="1">
+          <mxGeometry height="26" width="340" y="58" as="geometry" />
+        </mxCell>
+        <mxCell id="fs_l3" parent="fs_loc" style="text;align=left;spacingLeft=8;fontSize=12;" value="+ campus : String" vertex="1">
+          <mxGeometry height="26" width="340" y="84" as="geometry" />
+        </mxCell>
+        <mxCell id="fs_l4" parent="fs_loc" style="text;align=left;spacingLeft=8;fontSize=12;" value="+ landmark_description : String" vertex="1">
+          <mxGeometry height="26" width="340" y="110" as="geometry" />
+        </mxCell>
+        <mxCell id="fs_l5" parent="fs_loc" style="text;align=left;spacingLeft=8;fontSize=12;" value="+ is_active : Boolean" vertex="1">
+          <mxGeometry height="26" width="340" y="136" as="geometry" />
+        </mxCell>
+
+        <mxCell id="fs_tx" parent="1" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=32;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;whiteSpace=wrap;html=1;fontSize=13;fillColor=#FFFBEB;strokeColor=#B45309;" value="/transactions/{transactionId} [Root]" vertex="1">
+          <mxGeometry height="266" width="320" x="420" y="590" as="geometry" />
+        </mxCell>
+        <mxCell id="fs_t1" parent="fs_tx" style="text;align=left;spacingLeft=8;fontSize=12;fontStyle=1;" value="PK transactionId : String (Auto UUID)" vertex="1">
+          <mxGeometry height="26" width="320" y="32" as="geometry" />
+        </mxCell>
+        <mxCell id="fs_t2" parent="fs_tx" style="text;align=left;spacingLeft=8;fontSize=12;fontStyle=2;" value="REF item_id, hold_id : String" vertex="1">
+          <mxGeometry height="26" width="320" y="58" as="geometry" />
+        </mxCell>
+        <mxCell id="fs_t3" parent="fs_tx" style="text;align=left;spacingLeft=8;fontSize=12;" value="+ item_title : String (Embedded)" vertex="1">
+          <mxGeometry height="26" width="320" y="84" as="geometry" />
+        </mxCell>
+        <mxCell id="fs_t4" parent="fs_tx" style="text;align=left;spacingLeft=8;fontSize=12;fontStyle=2;" value="REF seller_id, buyer_id : String -&gt; /users" vertex="1">
+          <mxGeometry height="26" width="320" y="110" as="geometry" />
+        </mxCell>
+        <mxCell id="fs_t5" parent="fs_tx" style="text;align=left;spacingLeft=8;fontSize=12;" value="+ final_amount : Number (&gt;=0)" vertex="1">
+          <mxGeometry height="26" width="320" y="136" as="geometry" />
+        </mxCell>
+        <mxCell id="fs_t6" parent="fs_tx" style="text;align=left;spacingLeft=8;fontSize=12;" value="+ payment_method : String ('free'|'cash'|'bank_transfer')" vertex="1">
+          <mxGeometry height="26" width="320" y="162" as="geometry" />
+        </mxCell>
+        <mxCell id="fs_t7" parent="fs_tx" style="text;align=left;spacingLeft=8;fontSize=12;fontStyle=1;" value="+ current_status : String ('pending'|'completed'...)" vertex="1">
+          <mxGeometry height="26" width="320" y="188" as="geometry" />
+        </mxCell>
+        <mxCell id="fs_t8" parent="fs_tx" style="text;align=left;spacingLeft=8;fontSize=12;" value="+ completed_at : Timestamp | null" vertex="1">
+          <mxGeometry height="26" width="320" y="214" as="geometry" />
+        </mxCell>
+        <mxCell id="fs_t9" parent="fs_tx" style="text;align=left;spacingLeft=8;fontSize=12;" value="+ created_at, updated_at : Timestamp" vertex="1">
+          <mxGeometry height="26" width="320" y="240" as="geometry" />
+        </mxCell>
+
+        <mxCell id="fs_txlog" parent="1" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=32;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;whiteSpace=wrap;html=1;fontSize=13;fillColor=#F3E8FF;strokeColor=#7E22CE;" value="/transactions/{txId}/status_logs/{logId} [Sub]" vertex="1">
+          <mxGeometry height="162" width="320" x="420" y="900" as="geometry" />
+        </mxCell>
+        <mxCell id="fs_tl1" parent="fs_txlog" style="text;align=left;spacingLeft=8;fontSize=12;fontStyle=1;" value="PK logId : String (Auto UUID)" vertex="1">
+          <mxGeometry height="26" width="320" y="32" as="geometry" />
+        </mxCell>
+        <mxCell id="fs_tl2" parent="fs_txlog" style="text;align=left;spacingLeft=8;fontSize=12;" value="+ from_status, to_status : String" vertex="1">
+          <mxGeometry height="26" width="320" y="58" as="geometry" />
+        </mxCell>
+        <mxCell id="fs_tl3" parent="fs_txlog" style="text;align=left;spacingLeft=8;fontSize=12;" value="+ changed_by : String (UID | 'system')" vertex="1">
+          <mxGeometry height="26" width="320" y="84" as="geometry" />
+        </mxCell>
+        <mxCell id="fs_tl4" parent="fs_txlog" style="text;align=left;spacingLeft=8;fontSize=12;" value="+ reason : String" vertex="1">
+          <mxGeometry height="26" width="320" y="110" as="geometry" />
+        </mxCell>
+        <mxCell id="fs_tl5" parent="fs_txlog" style="text;align=left;spacingLeft=8;fontSize=12;" value="+ timestamp : Timestamp" vertex="1">
+          <mxGeometry height="26" width="320" y="136" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e_u_th" edge="1" parent="1" source="fs_users" style="edgeStyle=orthogonalEdgeStyle;dashed=1;strokeWidth=2;strokeColor=#7E22CE;endArrow=ERmany;" target="fs_trust" value="Subcollection 1:N">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_i_mod" edge="1" parent="1" source="fs_items" style="edgeStyle=orthogonalEdgeStyle;dashed=1;strokeWidth=2;strokeColor=#7E22CE;endArrow=ERmany;" target="fs_mod" value="Subcollection 1:N">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_tx_log" edge="1" parent="1" source="fs_tx" style="edgeStyle=orthogonalEdgeStyle;dashed=1;strokeWidth=2;strokeColor=#7E22CE;endArrow=ERmany;" target="fs_txlog" value="Subcollection 1:N">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_u_i" edge="1" parent="1" source="fs_users" style="edgeStyle=orthogonalEdgeStyle;strokeWidth=1.5;strokeColor=#475569;endArrow=ERmany;" target="fs_items">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_c_i" edge="1" parent="1" source="fs_cat" style="edgeStyle=orthogonalEdgeStyle;strokeWidth=1.5;strokeColor=#1D4ED8;endArrow=ERmany;" target="fs_items">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_s_i" edge="1" parent="1" source="fs_sub" style="edgeStyle=orthogonalEdgeStyle;strokeWidth=1.5;strokeColor=#1D4ED8;endArrow=ERmany;" target="fs_items">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_i_h" edge="1" parent="1" source="fs_items" style="edgeStyle=orthogonalEdgeStyle;strokeWidth=2;strokeColor=#B91C1C;endArrow=ERmany;" target="fs_holds" value="1:N (1 active)">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_h_mt" edge="1" parent="1" source="fs_holds" style="edgeStyle=orthogonalEdgeStyle;strokeWidth=1.5;strokeColor=#047857;endArrow=ERone;" target="fs_meetups" value="1:1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_loc_mt" edge="1" parent="1" source="fs_loc" style="edgeStyle=orthogonalEdgeStyle;strokeWidth=1.5;strokeColor=#047857;endArrow=ERmany;" target="fs_meetups">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_h_tx" edge="1" parent="1" source="fs_holds" style="edgeStyle=orthogonalEdgeStyle;strokeWidth=1.5;strokeColor=#B45309;endArrow=ERone;" target="fs_tx" value="1:1 converted">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram name="2. Conceptual &amp; Logical ERD" id="LogicalERD">
+    <mxGraphModel dx="1776" dy="1059" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1654" pageHeight="1169" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="lg_title" parent="1" style="text;html=1;align=center;fontSize=20;fontStyle=1;fontColor=#1E293B;" value="SƠ ĐỒ THỰC THỂ KẾT HỢP LOGIC (LOGICAL ERD) - HỆ THỐNG TRAO ĐỔI GIÁO TRÌNH &amp; THIẾT BỊ CŨ" vertex="1">
+          <mxGeometry height="40" width="1100" x="250" y="20" as="geometry" />
+        </mxCell>
+        <mxCell id="lg_u" parent="1" style="swimlane;fontStyle=1;startSize=30;fontSize=14;" value="USERS" vertex="1">
+          <mxGeometry height="264" width="280" x="80" y="100" as="geometry" />
+        </mxCell>
+        <mxCell id="lg_u1" parent="lg_u" style="text;align=left;spacingLeft=6;fontSize=12;fontStyle=1;" value="+ uid : VARCHAR(128) [PK - Firebase UID]" vertex="1">
           <mxGeometry height="26" width="280" y="30" as="geometry" />
         </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-4" parent="KyNEBrln-fPtM6UWV395-2" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=12;" value="+ student_id_code : VARCHAR(20) [UQ]" vertex="1">
+        <mxCell id="lg_u2" parent="lg_u" style="text;align=left;spacingLeft=6;fontSize=12;" value="+ student_id_code : VARCHAR(20) [UQ]" vertex="1">
           <mxGeometry height="26" width="280" y="56" as="geometry" />
         </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-5" parent="KyNEBrln-fPtM6UWV395-2" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=12;" value="+ email : VARCHAR(100) [UQ]" vertex="1">
+        <mxCell id="lg_u3" parent="lg_u" style="text;align=left;spacingLeft=6;fontSize=12;" value="+ email : VARCHAR(100) [UQ]" vertex="1">
           <mxGeometry height="26" width="280" y="82" as="geometry" />
         </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-6" parent="KyNEBrln-fPtM6UWV395-2" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=12;" value="+ full_name : VARCHAR(100)" vertex="1">
+        <mxCell id="lg_u4" parent="lg_u" style="text;align=left;spacingLeft=6;fontSize=12;" value="+ full_name, phone_number, avatar_url" vertex="1">
           <mxGeometry height="26" width="280" y="108" as="geometry" />
         </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-7" parent="KyNEBrln-fPtM6UWV395-2" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=12;" value="+ phone_number : VARCHAR(15)" vertex="1">
+        <mxCell id="lg_u5" parent="lg_u" style="text;align=left;spacingLeft=6;fontSize=12;" value="+ role : ENUM('student','admin')" vertex="1">
           <mxGeometry height="26" width="280" y="134" as="geometry" />
         </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-8" parent="KyNEBrln-fPtM6UWV395-2" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=12;" value="+ password_hash : VARCHAR(255)" vertex="1">
+        <mxCell id="lg_u6" parent="lg_u" style="text;align=left;spacingLeft=6;fontSize=12;" value="+ current_trust_score : INT (Default 100)" vertex="1">
           <mxGeometry height="26" width="280" y="160" as="geometry" />
         </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-9" parent="KyNEBrln-fPtM6UWV395-2" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=12;" value="+ role : ENUM(&#39;STUDENT&#39;,&#39;ADMIN&#39;)" vertex="1">
+        <mxCell id="lg_u7" parent="lg_u" style="text;align=left;spacingLeft=6;fontSize=12;" value="+ status : ENUM('active','suspended','banned')" vertex="1">
           <mxGeometry height="26" width="280" y="186" as="geometry" />
         </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-10" parent="KyNEBrln-fPtM6UWV395-2" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=12;" value="+ current_trust_score : INT" vertex="1">
+        <mxCell id="lg_u8" parent="lg_u" style="text;align=left;spacingLeft=6;fontSize=12;" value="+ hold_locked_until : TIMESTAMP NULL" vertex="1">
           <mxGeometry height="26" width="280" y="212" as="geometry" />
         </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-11" parent="KyNEBrln-fPtM6UWV395-2" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=12;" value="+ status : ENUM(&#39;ACTIVE&#39;,&#39;SUSPENDED&#39;)" vertex="1">
+        <mxCell id="lg_u9" parent="lg_u" style="text;align=left;spacingLeft=6;fontSize=12;" value="+ created_at, updated_at : TIMESTAMP" vertex="1">
           <mxGeometry height="26" width="280" y="238" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-12" parent="KyNEBrln-fPtM6UWV395-2" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=12;" value="+ created_at, updated_at : DATETIME" vertex="1">
-          <mxGeometry height="26" width="280" y="264" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-13" parent="1" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=30;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=light-dark(#6C8EBF, #ffffff);fontSize=14;" value="CATEGORIES" vertex="1">
-          <mxGeometry height="160" width="260" x="480" y="100" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-14" parent="KyNEBrln-fPtM6UWV395-13" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=12;fontStyle=1;" value="+ category_id : INT [PK]" vertex="1">
-          <mxGeometry height="26" width="260" y="30" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-15" parent="KyNEBrln-fPtM6UWV395-13" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=12;" value="+ category_name : VARCHAR(100) [UQ]" vertex="1">
-          <mxGeometry height="26" width="260" y="56" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-16" parent="KyNEBrln-fPtM6UWV395-13" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=12;" value="+ slug : VARCHAR(100) [UQ]" vertex="1">
-          <mxGeometry height="26" width="260" y="82" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-17" parent="KyNEBrln-fPtM6UWV395-13" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=12;" value="+ description : TEXT" vertex="1">
-          <mxGeometry height="26" width="260" y="108" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-18" parent="KyNEBrln-fPtM6UWV395-13" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=12;" value="+ is_active : TINYINT(1)" vertex="1">
-          <mxGeometry height="26" width="260" y="134" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-19" parent="1" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=30;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#6C8EBF;fontSize=14;" value="SUBJECTS" vertex="1">
-          <mxGeometry height="160" width="260" x="480" y="290" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-20" parent="KyNEBrln-fPtM6UWV395-19" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=12;fontStyle=1;" value="+ subject_id : INT [PK]" vertex="1">
-          <mxGeometry height="26" width="260" y="30" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-21" parent="KyNEBrln-fPtM6UWV395-19" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=12;" value="+ subject_code : VARCHAR(20) [UQ]" vertex="1">
-          <mxGeometry height="26" width="260" y="56" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-22" parent="KyNEBrln-fPtM6UWV395-19" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=12;" value="+ subject_name : VARCHAR(150)" vertex="1">
-          <mxGeometry height="26" width="260" y="82" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-23" parent="KyNEBrln-fPtM6UWV395-19" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=12;" value="+ faculty : VARCHAR(100)" vertex="1">
-          <mxGeometry height="26" width="260" y="108" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-24" parent="KyNEBrln-fPtM6UWV395-19" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=12;" value="+ is_active : TINYINT(1)" vertex="1">
-          <mxGeometry height="26" width="260" y="134" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-25" parent="1" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=30;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=default;fontSize=14;" value="ITEMS" vertex="1">
-          <mxGeometry height="368" width="310" x="840" y="100" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-26" parent="KyNEBrln-fPtM6UWV395-25" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=12;fontStyle=1;" value="+ item_id : BIGINT [PK]" vertex="1">
-          <mxGeometry height="26" width="310" y="30" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-27" parent="KyNEBrln-fPtM6UWV395-25" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=12;fontStyle=2;" value="# seller_id : BIGINT [FK -&gt; USERS]" vertex="1">
-          <mxGeometry height="26" width="310" y="56" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-28" parent="KyNEBrln-fPtM6UWV395-25" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=12;fontStyle=2;" value="# category_id : INT [FK -&gt; CATEGORIES]" vertex="1">
-          <mxGeometry height="26" width="310" y="82" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-29" parent="KyNEBrln-fPtM6UWV395-25" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=12;fontStyle=2;" value="# subject_id : INT [FK -&gt; SUBJECTS, NULL]" vertex="1">
-          <mxGeometry height="26" width="310" y="108" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-30" parent="KyNEBrln-fPtM6UWV395-25" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=12;" value="+ title : VARCHAR(200)" vertex="1">
-          <mxGeometry height="26" width="310" y="134" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-31" parent="KyNEBrln-fPtM6UWV395-25" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=12;" value="+ description : TEXT" vertex="1">
-          <mxGeometry height="26" width="310" y="160" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-32" parent="KyNEBrln-fPtM6UWV395-25" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=12;" value="+ item_type : ENUM(&#39;GIFT&#39;,&#39;SELL&#39;)" vertex="1">
-          <mxGeometry height="26" width="310" y="186" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-33" parent="KyNEBrln-fPtM6UWV395-25" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=12;" value="+ price : DECIMAL(10,2)" vertex="1">
-          <mxGeometry height="26" width="310" y="212" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-34" parent="KyNEBrln-fPtM6UWV395-25" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=12;" value="+ condition_level : ENUM(&#39;NEW_99&#39;,...)" vertex="1">
-          <mxGeometry height="26" width="310" y="238" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-35" parent="KyNEBrln-fPtM6UWV395-25" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=12;" value="+ item_status : ENUM(&#39;AVAILABLE&#39;,&#39;HELD&#39;,...)" vertex="1">
-          <mxGeometry height="26" width="310" y="264" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-36" parent="KyNEBrln-fPtM6UWV395-25" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=12;" value="+ moderation_status : ENUM(&#39;PENDING&#39;,...)" vertex="1">
-          <mxGeometry height="26" width="310" y="290" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-37" parent="KyNEBrln-fPtM6UWV395-25" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=12;" value="+ version : INT [Optimistic Lock]" vertex="1">
-          <mxGeometry height="26" width="310" y="316" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-38" parent="KyNEBrln-fPtM6UWV395-25" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=12;" value="+ created_at, updated_at : DATETIME" vertex="1">
-          <mxGeometry height="26" width="310" y="342" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-39" parent="1" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=30;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=default;fontSize=14;" value="ITEM_IMAGES" vertex="1">
-          <mxGeometry height="186" width="260" x="1240" y="100" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-40" parent="KyNEBrln-fPtM6UWV395-39" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=12;fontStyle=1;" value="+ image_id : BIGINT [PK]" vertex="1">
-          <mxGeometry height="26" width="260" y="30" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-41" parent="KyNEBrln-fPtM6UWV395-39" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=12;fontStyle=2;" value="# item_id : BIGINT [FK -&gt; ITEMS]" vertex="1">
-          <mxGeometry height="26" width="260" y="56" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-42" parent="KyNEBrln-fPtM6UWV395-39" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=12;" value="+ image_url : VARCHAR(500)" vertex="1">
-          <mxGeometry height="26" width="260" y="82" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-43" parent="KyNEBrln-fPtM6UWV395-39" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=12;" value="+ is_primary : TINYINT(1)" vertex="1">
-          <mxGeometry height="26" width="260" y="108" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-44" parent="KyNEBrln-fPtM6UWV395-39" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=12;" value="+ display_order : SMALLINT" vertex="1">
-          <mxGeometry height="26" width="260" y="134" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-45" parent="KyNEBrln-fPtM6UWV395-39" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=12;" value="+ uploaded_at : DATETIME" vertex="1">
-          <mxGeometry height="26" width="260" y="160" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-46" parent="1" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=30;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=light-dark(#B85450, #ffffff);fontSize=14;" value="HOLDS (Race Condition Protection)" vertex="1">
-          <mxGeometry height="264" width="310" x="840" y="550" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-47" parent="KyNEBrln-fPtM6UWV395-46" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=12;fontStyle=1;" value="+ hold_id : BIGINT [PK]" vertex="1">
-          <mxGeometry height="26" width="310" y="30" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-48" parent="KyNEBrln-fPtM6UWV395-46" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=12;fontStyle=2;" value="# item_id : BIGINT [FK -&gt; ITEMS]" vertex="1">
-          <mxGeometry height="26" width="310" y="56" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-49" parent="KyNEBrln-fPtM6UWV395-46" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=12;fontStyle=2;" value="# requester_id : BIGINT [FK -&gt; USERS]" vertex="1">
-          <mxGeometry height="26" width="310" y="82" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-50" parent="KyNEBrln-fPtM6UWV395-46" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=12;" value="+ hold_start_time : DATETIME" vertex="1">
-          <mxGeometry height="26" width="310" y="108" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-51" parent="KyNEBrln-fPtM6UWV395-46" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=12;" value="+ hold_expires_at : DATETIME (24-48h)" vertex="1">
-          <mxGeometry height="26" width="310" y="134" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-52" parent="KyNEBrln-fPtM6UWV395-46" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=12;" value="+ hold_status : ENUM(&#39;ACTIVE&#39;,...)" vertex="1">
-          <mxGeometry height="26" width="310" y="160" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-53" parent="KyNEBrln-fPtM6UWV395-46" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=12;" value="+ cancel_reason : VARCHAR(255)" vertex="1">
-          <mxGeometry height="26" width="310" y="186" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-54" parent="KyNEBrln-fPtM6UWV395-46" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=12;fontStyle=1;fontColor=#B85450;" value="+ active_item_lock : BIGINT [VIRTUAL UQ]" vertex="1">
-          <mxGeometry height="26" width="310" y="212" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-55" parent="KyNEBrln-fPtM6UWV395-46" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=12;" value="+ created_at, updated_at : DATETIME" vertex="1">
-          <mxGeometry height="26" width="310" y="238" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-56" parent="1" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=30;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=default;fontSize=14;" value="MEETUP_LOCATIONS" vertex="1">
-          <mxGeometry height="160" width="270" x="1240" y="880" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-57" parent="KyNEBrln-fPtM6UWV395-56" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=12;fontStyle=1;" value="+ location_id : INT [PK]" vertex="1">
-          <mxGeometry height="26" width="270" y="30" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-58" parent="KyNEBrln-fPtM6UWV395-56" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=12;" value="+ location_name : VARCHAR(100)" vertex="1">
-          <mxGeometry height="26" width="270" y="56" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-59" parent="KyNEBrln-fPtM6UWV395-56" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=12;" value="+ campus : VARCHAR(50)" vertex="1">
-          <mxGeometry height="26" width="270" y="82" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-60" parent="KyNEBrln-fPtM6UWV395-56" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=12;" value="+ landmark_description : TEXT" vertex="1">
-          <mxGeometry height="26" width="270" y="108" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-61" parent="KyNEBrln-fPtM6UWV395-56" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=12;" value="+ is_active : TINYINT(1)" vertex="1">
-          <mxGeometry height="26" width="270" y="134" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-62" parent="1" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=30;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=default;fontSize=14;" value="MEETUPS" vertex="1">
-          <mxGeometry height="212" width="270" x="1240" y="550" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-63" parent="KyNEBrln-fPtM6UWV395-62" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=12;fontStyle=1;" value="+ meetup_id : BIGINT [PK]" vertex="1">
-          <mxGeometry height="26" width="270" y="30" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-64" parent="KyNEBrln-fPtM6UWV395-62" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=12;fontStyle=2;" value="# hold_id : BIGINT [FK, UQ -&gt; HOLDS]" vertex="1">
-          <mxGeometry height="26" width="270" y="56" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-65" parent="KyNEBrln-fPtM6UWV395-62" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=12;fontStyle=2;" value="# location_id : INT [FK -&gt; LOCATIONS]" vertex="1">
-          <mxGeometry height="26" width="270" y="82" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-66" parent="KyNEBrln-fPtM6UWV395-62" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=12;" value="+ proposed_time : DATETIME" vertex="1">
-          <mxGeometry height="26" width="270" y="108" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-67" parent="KyNEBrln-fPtM6UWV395-62" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=12;" value="+ status : ENUM(&#39;PROPOSED&#39;,...)" vertex="1">
-          <mxGeometry height="26" width="270" y="134" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-68" parent="KyNEBrln-fPtM6UWV395-62" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=12;" value="+ note : TEXT" vertex="1">
-          <mxGeometry height="26" width="270" y="160" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-69" parent="KyNEBrln-fPtM6UWV395-62" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=12;" value="+ created_at, updated_at : DATETIME" vertex="1">
-          <mxGeometry height="26" width="270" y="186" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-70" parent="1" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=30;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=default;fontSize=14;" value="TRANSACTIONS" vertex="1">
-          <mxGeometry height="290" width="310" x="840" y="920" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-71" parent="KyNEBrln-fPtM6UWV395-70" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=12;fontStyle=1;" value="+ transaction_id : BIGINT [PK]" vertex="1">
-          <mxGeometry height="26" width="310" y="30" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-72" parent="KyNEBrln-fPtM6UWV395-70" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=12;fontStyle=2;" value="# item_id : BIGINT [FK, UQ -&gt; ITEMS]" vertex="1">
-          <mxGeometry height="26" width="310" y="56" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-73" parent="KyNEBrln-fPtM6UWV395-70" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=12;fontStyle=2;" value="# hold_id : BIGINT [FK, NULL -&gt; HOLDS]" vertex="1">
-          <mxGeometry height="26" width="310" y="82" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-74" parent="KyNEBrln-fPtM6UWV395-70" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=12;fontStyle=2;" value="# seller_id : BIGINT [FK -&gt; USERS]" vertex="1">
-          <mxGeometry height="26" width="310" y="108" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-75" parent="KyNEBrln-fPtM6UWV395-70" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=12;fontStyle=2;" value="# buyer_id : BIGINT [FK -&gt; USERS]" vertex="1">
-          <mxGeometry height="26" width="310" y="134" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-76" parent="KyNEBrln-fPtM6UWV395-70" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=12;" value="+ final_amount : DECIMAL(10,2)" vertex="1">
-          <mxGeometry height="26" width="310" y="160" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-77" parent="KyNEBrln-fPtM6UWV395-70" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=12;" value="+ payment_method : ENUM(&#39;FREE&#39;,...)" vertex="1">
-          <mxGeometry height="26" width="310" y="186" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-78" parent="KyNEBrln-fPtM6UWV395-70" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=12;" value="+ current_status : ENUM(&#39;PENDING&#39;,...)" vertex="1">
-          <mxGeometry height="26" width="310" y="212" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-79" parent="KyNEBrln-fPtM6UWV395-70" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=12;" value="+ completed_at : DATETIME" vertex="1">
-          <mxGeometry height="26" width="310" y="238" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-80" parent="KyNEBrln-fPtM6UWV395-70" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=12;" value="+ created_at : DATETIME" vertex="1">
-          <mxGeometry height="26" width="310" y="264" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-81" parent="1" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=30;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;whiteSpace=wrap;html=1;fillColor=#FFE6CC;strokeColor=#D79B00;fontSize=14;" value="TRANSACTION_STATUS_LOGS" vertex="1">
-          <mxGeometry height="212" width="310" x="840" y="1260" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-82" parent="KyNEBrln-fPtM6UWV395-81" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=12;fontStyle=1;" value="+ log_id : BIGINT [PK]" vertex="1">
-          <mxGeometry height="26" width="310" y="30" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-83" parent="KyNEBrln-fPtM6UWV395-81" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=12;fontStyle=2;" value="# transaction_id : BIGINT [FK]" vertex="1">
-          <mxGeometry height="26" width="310" y="56" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-84" parent="KyNEBrln-fPtM6UWV395-81" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=12;" value="+ from_status, to_status : VARCHAR(20)" vertex="1">
-          <mxGeometry height="26" width="310" y="82" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-85" parent="KyNEBrln-fPtM6UWV395-81" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=12;" value="+ changed_by_role : ENUM(&#39;BUYER&#39;,...)" vertex="1">
-          <mxGeometry height="26" width="310" y="108" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-86" parent="KyNEBrln-fPtM6UWV395-81" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=12;fontStyle=2;" value="# changed_by_user_id : BIGINT [FK, NULL]" vertex="1">
-          <mxGeometry height="26" width="310" y="134" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-87" parent="KyNEBrln-fPtM6UWV395-81" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=12;" value="+ reason : TEXT" vertex="1">
-          <mxGeometry height="26" width="310" y="160" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-88" parent="KyNEBrln-fPtM6UWV395-81" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=12;" value="+ changed_at : DATETIME" vertex="1">
-          <mxGeometry height="26" width="310" y="186" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-89" parent="1" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=30;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=light-dark(#9673A6, #ffffff);fontSize=14;" value="TRUST_SCORE_HISTORY (Ledger)" vertex="1">
-          <mxGeometry height="264" width="300" x="80" y="470" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-90" parent="KyNEBrln-fPtM6UWV395-89" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=12;fontStyle=1;" value="+ score_log_id : BIGINT [PK]" vertex="1">
-          <mxGeometry height="26" width="300" y="30" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-91" parent="KyNEBrln-fPtM6UWV395-89" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=12;fontStyle=2;" value="# user_id : BIGINT [FK -&gt; USERS]" vertex="1">
-          <mxGeometry height="26" width="300" y="56" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-92" parent="KyNEBrln-fPtM6UWV395-89" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=12;" value="+ score_change : INT (+5, -10, -30)" vertex="1">
-          <mxGeometry height="26" width="300" y="82" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-93" parent="KyNEBrln-fPtM6UWV395-89" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=12;" value="+ balance_after_change : INT" vertex="1">
-          <mxGeometry height="26" width="300" y="108" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-94" parent="KyNEBrln-fPtM6UWV395-89" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=12;" value="+ event_type : ENUM(&#39;COMPLETE_TX&#39;,...)" vertex="1">
-          <mxGeometry height="26" width="300" y="134" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-95" parent="KyNEBrln-fPtM6UWV395-89" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=12;" value="+ reference_type : ENUM(&#39;TRANSACTION&#39;,...)" vertex="1">
-          <mxGeometry height="26" width="300" y="160" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-96" parent="KyNEBrln-fPtM6UWV395-89" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=12;" value="+ reference_id : BIGINT" vertex="1">
-          <mxGeometry height="26" width="300" y="186" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-97" parent="KyNEBrln-fPtM6UWV395-89" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=12;" value="+ description : TEXT" vertex="1">
-          <mxGeometry height="26" width="300" y="212" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-98" parent="KyNEBrln-fPtM6UWV395-89" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=12;" value="+ created_at : DATETIME" vertex="1">
-          <mxGeometry height="26" width="300" y="238" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-99" parent="1" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=30;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=light-dark(#9673A6, #ffffff);fontSize=14;" value="MODERATION_LOGS" vertex="1">
-          <mxGeometry height="186" width="300" x="80" y="800" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-100" parent="KyNEBrln-fPtM6UWV395-99" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=12;fontStyle=1;" value="+ mod_log_id : BIGINT [PK]" vertex="1">
-          <mxGeometry height="26" width="300" y="30" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-101" parent="KyNEBrln-fPtM6UWV395-99" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=12;fontStyle=2;" value="# item_id : BIGINT [FK -&gt; ITEMS]" vertex="1">
-          <mxGeometry height="26" width="300" y="56" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-102" parent="KyNEBrln-fPtM6UWV395-99" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=12;fontStyle=2;" value="# admin_id : BIGINT [FK -&gt; USERS]" vertex="1">
-          <mxGeometry height="26" width="300" y="82" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-103" parent="KyNEBrln-fPtM6UWV395-99" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=12;" value="+ action : ENUM(&#39;APPROVE&#39;,&#39;REJECT&#39;,...)" vertex="1">
-          <mxGeometry height="26" width="300" y="108" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-104" parent="KyNEBrln-fPtM6UWV395-99" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=12;" value="+ reason : TEXT" vertex="1">
-          <mxGeometry height="26" width="300" y="134" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-105" parent="KyNEBrln-fPtM6UWV395-99" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=12;" value="+ created_at : DATETIME" vertex="1">
-          <mxGeometry height="26" width="300" y="160" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-106" edge="1" parent="1" source="KyNEBrln-fPtM6UWV395-2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;startArrow=ERone;startFill=0;endArrow=ERmany;endFill=0;strokeWidth=1.5;strokeColor=#4A5568;" target="KyNEBrln-fPtM6UWV395-25">
-          <mxGeometry relative="1" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-107" edge="1" parent="1" source="KyNEBrln-fPtM6UWV395-13" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;startArrow=ERone;startFill=0;endArrow=ERmany;endFill=0;strokeWidth=1.5;strokeColor=#4A5568;" target="KyNEBrln-fPtM6UWV395-25">
-          <mxGeometry relative="1" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-108" edge="1" parent="1" source="KyNEBrln-fPtM6UWV395-19" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;startArrow=ERone;startFill=0;endArrow=ERmany;endFill=0;strokeWidth=1.5;strokeColor=#4A5568;" target="KyNEBrln-fPtM6UWV395-25">
-          <mxGeometry relative="1" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-109" edge="1" parent="1" source="KyNEBrln-fPtM6UWV395-25" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;startArrow=ERone;startFill=0;endArrow=ERmany;endFill=0;strokeWidth=1.5;strokeColor=#4A5568;" target="KyNEBrln-fPtM6UWV395-39">
-          <mxGeometry relative="1" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-110" edge="1" parent="1" source="KyNEBrln-fPtM6UWV395-25" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;startArrow=ERone;startFill=0;endArrow=ERmany;endFill=0;strokeWidth=1.5;strokeColor=#B85450;" target="KyNEBrln-fPtM6UWV395-46">
-          <mxGeometry relative="1" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-111" edge="1" parent="1" source="KyNEBrln-fPtM6UWV395-2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;startArrow=ERone;startFill=0;endArrow=ERmany;endFill=0;strokeWidth=1.5;strokeColor=#4A5568;" target="KyNEBrln-fPtM6UWV395-46">
-          <mxGeometry relative="1" as="geometry">
-            <Array as="points">
-              <mxPoint x="220" y="600" />
-            </Array>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-112" edge="1" parent="1" source="KyNEBrln-fPtM6UWV395-46" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;startArrow=ERone;startFill=0;endArrow=ERone;endFill=0;strokeWidth=1.5;strokeColor=#82B366;" target="KyNEBrln-fPtM6UWV395-62">
-          <mxGeometry relative="1" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-113" edge="1" parent="1" source="KyNEBrln-fPtM6UWV395-56" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;startArrow=ERone;startFill=0;endArrow=ERmany;endFill=0;strokeWidth=1.5;strokeColor=#82B366;" target="KyNEBrln-fPtM6UWV395-62">
-          <mxGeometry relative="1" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-114" edge="1" parent="1" source="KyNEBrln-fPtM6UWV395-46" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;startArrow=ERone;startFill=0;endArrow=ERone;endFill=0;strokeWidth=1.5;strokeColor=#D79B00;" target="KyNEBrln-fPtM6UWV395-70">
-          <mxGeometry relative="1" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-115" edge="1" parent="1" source="KyNEBrln-fPtM6UWV395-70" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;startArrow=ERone;startFill=0;endArrow=ERmany;endFill=0;strokeWidth=1.5;strokeColor=#D79B00;" target="KyNEBrln-fPtM6UWV395-81">
-          <mxGeometry relative="1" as="geometry" />
-        </mxCell>
-        <mxCell id="KyNEBrln-fPtM6UWV395-116" edge="1" parent="1" source="KyNEBrln-fPtM6UWV395-2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;startArrow=ERone;startFill=0;endArrow=ERmany;endFill=0;strokeWidth=1.5;strokeColor=#9673A6;" target="KyNEBrln-fPtM6UWV395-89">
-          <mxGeometry relative="1" as="geometry" />
         </mxCell>
       </root>
     </mxGraphModel>

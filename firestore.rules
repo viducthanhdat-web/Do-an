@@ -1,33 +1,187 @@
 rules_version = '2';
+
+// =============================================================================
+// UniExchange — Cloud Firestore Security Rules (v2)
+// Standardized snake_case Schema (8 Root Collections + 3 Subcollections)
+// =============================================================================
+//
+// Assumed Data Model
+// ------------------
+// 1. /users/{userId}
+//    - uid: string (optional, immutable, == userId)
+//    - student_id_code: string (required, <= 50 chars)
+//    - email: string (required, <= 254 chars)
+//    - full_name: string (required, 1..100 chars)
+//    - phone_number: string (required, <= 30 chars)
+//    - avatar_url: string | null (optional, <= 200000 chars)
+//    - role: 'student' | 'admin' (required, immutable for non-admins)
+//    - current_trust_score: int (required, 100 on create, 0..200)
+//    - status: 'active' | 'locked' | 'suspended' | 'banned' | 'disabled' (required, 'active' on create)
+//    - hold_locked_until: timestamp | string | null (optional)
+//    - created_at: timestamp (required, immutable, == request.time on create)
+//    - updated_at: timestamp (required, == request.time on write)
+//
+// 2. /users/{userId}/trust_history/{logId} (Append-only Immutable Ledger)
+//    - score_change: int (required)
+//    - balance_after: int (required, >= 0)
+//    - event_type: string (required)
+//    - reference_id: string | null (optional, <= 128 chars)
+//    - description: string (required, 1..500 chars)
+//    - created_at: timestamp (required, == request.time)
+//
+// 3. /categories/{categoryId}
+//    - category_name: string (required, 1..100 chars)
+//    - description: string | null (optional, <= 500 chars)
+//    - display_order: number | null (optional, 0..10000)
+//    - is_active: bool (required)
+//
+// 4. /subjects/{subjectId}
+//    - subject_code: string (required, 1..50 chars)
+//    - subject_name: string (required, 1..200 chars)
+//    - faculty: string | null (optional, <= 200 chars)
+//    - is_active: bool (required)
+//
+// 5. /meetup_locations/{locationId}
+//    - location_name: string (required, 1..200 chars)
+//    - campus: string | null (optional, <= 200 chars)
+//    - landmark_description: string | null (optional, <= 500 chars)
+//    - is_active: bool (required)
+//
+// 6. /items/{itemId}
+//    - seller_id: string (required, immutable, == request.auth.uid on create)
+//    - seller_summary: map (required, <= 10 keys)
+//    - category_id: string (required, 1..128 chars)
+//    - subject_id: string | null (optional, <= 128 chars)
+//    - subject_name: string | null (optional, <= 200 chars)
+//    - title: string (required, 1..100 chars)
+//    - description: string (required, 0..1000 chars)
+//    - item_type: 'gift' | 'sell' (required)
+//    - price: number (required, >= 0, == 0 when item_type == 'gift')
+//    - condition_level: 'new_99' | 'used_good' | 'used_acceptable' (required)
+//    - image_urls: list<string> (required, <= 10 items)
+//    - primary_image: string | null (required, <= 200000 chars)
+//    - item_status: 'available' | 'held' | 'completed' | 'hidden' (required)
+//    - active_hold_id: string | null (optional)
+//    - moderation_status: 'pending' | 'approved' | 'rejected' (required)
+//    - reject_reason: string | null (optional, <= 500 chars)
+//    - created_at: timestamp (required, immutable, == request.time on create)
+//    - updated_at: timestamp (required, == request.time on write)
+//
+// 7. /items/{itemId}/moderation_logs/{modLogId} (Append-only Audit Log)
+//    - admin_id: string (required, == request.auth.uid)
+//    - action: 'approve' | 'reject' | 'hide' (required)
+//    - reason: string | null (optional, <= 500 chars)
+//    - created_at: timestamp (required, == request.time)
+//
+// 8. /holds/{holdId}
+//    - item_id: string (required)
+//    - item_title: string (required, 1..100 chars)
+//    - primary_image: string | null (optional, <= 200000 chars)
+//    - seller_id: string (required)
+//    - seller_summary: map | null (optional, <= 10 keys)
+//    - requester_id: string (required, == request.auth.uid on create, != seller_id)
+//    - requester_summary: map | null (optional, <= 10 keys)
+//    - meetup_summary: map | string | null (optional)
+//    - hold_start_time: timestamp (required)
+//    - hold_expires_at: timestamp (required, > hold_start_time)
+//    - hold_status: 'active' | 'cancelled' | 'converted' | 'expired' (required)
+//    - cancel_reason: string | null (optional, <= 500 chars)
+//    - created_at: timestamp (required, immutable, == request.time on create)
+//    - updated_at: timestamp (required, == request.time on write)
+//
+// 9. /meetups/{meetupId}
+//    - hold_id: string (required)
+//    - item_id: string (required)
+//    - seller_id: string (required)
+//    - buyer_id: string (required, == request.auth.uid on create, != seller_id)
+//    - location_id: string | null (optional, <= 128 chars)
+//    - location_name: string (required, 1..200 chars)
+//    - proposed_time: timestamp | string (required)
+//    - status: 'proposed' | 'confirmed' | 'rescheduled' | 'cancelled' | 'completed' (required)
+//    - note: string | null (optional, <= 500 chars)
+//    - created_at: timestamp (required, immutable, == request.time on create)
+//    - updated_at: timestamp (required, == request.time on write)
+//
+// 10. /transactions/{txId}
+//     - item_id: string (required)
+//     - item_title: string | null (optional, 1..100 chars)
+//     - hold_id: string (required)
+//     - seller_id: string (required)
+//     - buyer_id: string (required, != seller_id)
+//     - final_amount: number (required, >= 0)
+//     - payment_method: 'cash' | 'bank_transfer' | 'free' (required)
+//     - current_status: 'pending' | 'completed' | 'disputed' | 'cancelled' (required)
+//     - completed_at: timestamp | null (optional)
+//     - created_at: timestamp (required, immutable, == request.time on create)
+//     - updated_at: timestamp (required, == request.time on write)
+//
+// 11. /transactions/{txId}/status_logs/{logId} (Append-only Audit Log)
+//     - from_status: string | null (optional, <= 50 chars)
+//     - to_status: string (required, <= 50 chars)
+//     - changed_by: string (required, == request.auth.uid)
+//     - reason: string | null (optional, <= 500 chars)
+//     - timestamp: timestamp (required, == request.time)
+// =============================================================================
+
 service cloud.firestore {
   match /databases/{database}/documents {
-    // -------------------------------------------------------------------------
-    // Global Safety Net
-    // -------------------------------------------------------------------------
+
+    // =========================================================================
+    // Global Safety Net (Default Deny)
+    // =========================================================================
     match /{document=**} {
       allow read, write: if false;
     }
 
-    // -------------------------------------------------------------------------
-    // Global Helpers
-    // -------------------------------------------------------------------------
+    // =========================================================================
+    // Global Helper Functions
+    // =========================================================================
+
     function isSignedIn() {
       return request.auth != null;
     }
 
-    function isVerified() {
-      return isSignedIn() && request.auth.token.email_verified == true;
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isBootstrapAdminEmail() {
+      return isSignedIn() &&
+             'email' in request.auth.token &&
+             request.auth.token.email == 'viducthanhdat3@gmail.com';
     }
 
     function isAdmin() {
-      return isVerified() && (
-        request.auth.token.email == 'viducthanhdat3@gmail.com' ||
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
+      return isSignedIn() && (
+        ('role' in request.auth.token && request.auth.token.role == 'admin') ||
+        isBootstrapAdminEmail() ||
+        isDatabaseAdmin()
       );
     }
 
-    function isOwner(userId) {
-      return isSignedIn() && request.auth.uid == userId;
+    function isDatabaseAdmin() {
+      let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid));
+      return userDoc != null && userDoc.data.get('role', '') == 'admin';
+    }
+
+    function isItemSeller(itemId) {
+      let itemDoc = get(/databases/$(database)/documents/items/$(itemId));
+      return isSignedIn() && itemDoc != null && itemDoc.data.seller_id == request.auth.uid;
+    }
+
+    function isTransactionParticipant(txId) {
+      let txDoc = get(/databases/$(database)/documents/transactions/$(txId));
+      return isSignedIn() &&
+             txDoc != null &&
+             (txDoc.data.seller_id == request.auth.uid || txDoc.data.buyer_id == request.auth.uid);
+    }
+
+    function isTransactionParticipantAfter(txId) {
+      let txAfter = getAfter(/databases/$(database)/documents/transactions/$(txId));
+      return txAfter != null &&
+             (isAdmin() ||
+              txAfter.data.seller_id == request.auth.uid ||
+              txAfter.data.buyer_id == request.auth.uid);
     }
 
     function incoming() {
@@ -39,85 +193,591 @@ service cloud.firestore {
     }
 
     function isValidId(id) {
-      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+      return id is string && id.size() >= 1 && id.size() <= 128;
     }
 
-    // -------------------------------------------------------------------------
-    // Entity Validation Blueprints
-    // -------------------------------------------------------------------------
+    function hasRequiredFields(data, fields) {
+      return data.keys().hasAll(fields);
+    }
+
+    function hasOnlyAllowedFields(data, fields) {
+      return data.keys().hasOnly(fields);
+    }
+
+    function isOptionalNullableString(data, field, maxLen) {
+      return !(field in data) ||
+             data[field] == null ||
+             (data[field] is string && data[field].size() <= maxLen);
+    }
+
+    function isValidImageList(urls) {
+      return urls is list &&
+             urls.size() <= 10 &&
+             (urls.size() < 1 || (urls[0] is string && urls[0].size() <= 200000)) &&
+             (urls.size() < 2 || (urls[1] is string && urls[1].size() <= 200000)) &&
+             (urls.size() < 3 || (urls[2] is string && urls[2].size() <= 200000)) &&
+             (urls.size() < 4 || (urls[3] is string && urls[3].size() <= 200000)) &&
+             (urls.size() < 5 || (urls[4] is string && urls[4].size() <= 200000)) &&
+             (urls.size() < 6 || (urls[5] is string && urls[5].size() <= 200000)) &&
+             (urls.size() < 7 || (urls[6] is string && urls[6].size() <= 200000)) &&
+             (urls.size() < 8 || (urls[7] is string && urls[7].size() <= 200000)) &&
+             (urls.size() < 9 || (urls[8] is string && urls[8].size() <= 200000)) &&
+             (urls.size() < 10 || (urls[9] is string && urls[9].size() <= 200000));
+    }
+
+    // =========================================================================
+    // Domain Validators (Used in BOTH create and update rules)
+    // =========================================================================
 
     function isValidUser(data) {
-      return data.keys().hasAll(['uid', 'role']) &&
-             data.keys().hasOnly(['uid', 'displayName', 'email', 'role', 'trustScore', 'photoURL', 'phoneNumber', 'createdAt']) &&
-             data.uid == request.auth.uid &&
-             (data.email == null || data.email == request.auth.token.email || data.email == "") &&
-             data.role in ['user', 'admin'] &&
-             (data.trustScore == null || (data.trustScore is number && data.trustScore >= 0 && data.trustScore <= 100));
+      let required = [
+        'student_id_code', 'email', 'full_name', 'phone_number',
+        'role', 'current_trust_score', 'status', 'created_at', 'updated_at'
+      ];
+      let allowed = [
+        'uid', 'student_id_code', 'email', 'full_name', 'phone_number',
+        'avatar_url', 'role', 'current_trust_score', 'status',
+        'hold_locked_until', 'created_at', 'updated_at'
+      ];
+      return hasRequiredFields(data, required) &&
+             hasOnlyAllowedFields(data, allowed) &&
+             (!('uid' in data) || isValidId(data.uid)) &&
+             data.student_id_code is string && data.student_id_code.size() <= 50 &&
+             data.email is string && data.email.size() <= 254 &&
+             data.full_name is string && data.full_name.size() >= 1 && data.full_name.size() <= 100 &&
+             data.phone_number is string && data.phone_number.size() <= 30 &&
+             isOptionalNullableString(data, 'avatar_url', 200000) &&
+             data.role in ['student', 'admin'] &&
+             data.current_trust_score is int && data.current_trust_score >= 0 && data.current_trust_score <= 1000 &&
+             data.status in ['active', 'locked', 'suspended', 'banned', 'disabled'] &&
+             (!('hold_locked_until' in data) || data.hold_locked_until == null ||
+              data.hold_locked_until is timestamp ||
+              (data.hold_locked_until is string && data.hold_locked_until.size() <= 64)) &&
+             data.created_at is timestamp &&
+             data.updated_at is timestamp;
+    }
+
+    function isValidTrustHistoryLog(data) {
+      let required = ['score_change', 'balance_after', 'event_type', 'description', 'created_at'];
+      let allowed = ['score_change', 'balance_after', 'event_type', 'reference_id', 'description', 'created_at'];
+      return hasRequiredFields(data, required) &&
+             hasOnlyAllowedFields(data, allowed) &&
+             data.score_change is int && data.score_change >= -1000 && data.score_change <= 1000 &&
+             data.balance_after is int && data.balance_after >= 0 && data.balance_after <= 1000 &&
+             data.event_type is string &&
+             data.event_type in ['INIT', 'COMPLETE_TX', 'CANCEL_HOLD', 'EXPIRED_HOLD', 'NO_SHOW', 'ADMIN_ADJUST', 'LOCK_HOLD'] &&
+             isOptionalNullableString(data, 'reference_id', 128) &&
+             data.description is string && data.description.size() >= 1 && data.description.size() <= 500 &&
+             data.created_at is timestamp;
+    }
+
+    function isValidCategory(data) {
+      let allowed = ['category_name', 'description', 'display_order', 'is_active'];
+      return hasRequiredFields(data, ['category_name', 'is_active']) &&
+             hasOnlyAllowedFields(data, allowed) &&
+             data.category_name is string && data.category_name.size() >= 1 && data.category_name.size() <= 100 &&
+             isOptionalNullableString(data, 'description', 500) &&
+             (!('display_order' in data) || data.display_order == null ||
+              (data.display_order is number && data.display_order >= 0 && data.display_order <= 10000)) &&
+             data.is_active is bool;
+    }
+
+    function isValidSubject(data) {
+      let allowed = ['subject_code', 'subject_name', 'faculty', 'is_active'];
+      return hasRequiredFields(data, ['subject_code', 'subject_name', 'is_active']) &&
+             hasOnlyAllowedFields(data, allowed) &&
+             data.subject_code is string && data.subject_code.size() >= 1 && data.subject_code.size() <= 50 &&
+             data.subject_name is string && data.subject_name.size() >= 1 && data.subject_name.size() <= 200 &&
+             isOptionalNullableString(data, 'faculty', 200) &&
+             data.is_active is bool;
+    }
+
+    function isValidMeetupLocation(data) {
+      let allowed = ['location_name', 'campus', 'landmark_description', 'is_active'];
+      return hasRequiredFields(data, ['location_name', 'is_active']) &&
+             hasOnlyAllowedFields(data, allowed) &&
+             data.location_name is string && data.location_name.size() >= 1 && data.location_name.size() <= 200 &&
+             isOptionalNullableString(data, 'campus', 200) &&
+             isOptionalNullableString(data, 'landmark_description', 500) &&
+             data.is_active is bool;
     }
 
     function isValidItem(data) {
-      return data.keys().hasAll(['title', 'category', 'sellerId', 'status', 'createdAt']) &&
-             data.keys().hasOnly(['id', 'title', 'description', 'category', 'subject', 'condition', 'price', 'sellerId', 'sellerName', 'status', 'imageUrl', 'createdAt', 'updatedAt']) &&
-             data.title is string && data.title.size() <= 100 &&
-             data.category in ['Textbook', 'Equipment', 'Note', 'Other'] &&
-             data.sellerId == request.auth.uid &&
-             data.status in ['available', 'held', 'exchanged'] &&
-             (data.price == null || (data.price is number && data.price >= 0)) &&
-             data.createdAt == request.time;
+      let required = [
+        'seller_id', 'seller_summary', 'category_id', 'title', 'description',
+        'item_type', 'price', 'condition_level', 'image_urls', 'primary_image',
+        'item_status', 'moderation_status', 'created_at', 'updated_at'
+      ];
+      let allowed = [
+        'seller_id', 'seller_summary', 'category_id', 'subject_id', 'subject_name',
+        'title', 'description', 'item_type', 'price', 'condition_level',
+        'image_urls', 'primary_image', 'item_status', 'active_hold_id',
+        'moderation_status', 'reject_reason', 'created_at', 'updated_at'
+      ];
+      return hasRequiredFields(data, required) &&
+             hasOnlyAllowedFields(data, allowed) &&
+             isValidId(data.seller_id) &&
+             data.seller_summary is map && data.seller_summary.keys().size() <= 10 &&
+             isValidId(data.category_id) &&
+             isOptionalNullableString(data, 'subject_id', 128) &&
+             isOptionalNullableString(data, 'subject_name', 200) &&
+             data.title is string && data.title.size() >= 1 && data.title.size() <= 100 &&
+             data.description is string && data.description.size() <= 1000 &&
+             data.item_type in ['gift', 'sell'] &&
+             data.price is number && data.price >= 0 && data.price <= 1000000000 &&
+             (data.item_type != 'gift' || data.price == 0) &&
+             data.condition_level in ['new_99', 'used_good', 'used_acceptable'] &&
+             isValidImageList(data.image_urls) &&
+             (data.primary_image == null || (data.primary_image is string && data.primary_image.size() <= 200000)) &&
+             data.item_status in ['available', 'held', 'completed', 'hidden'] &&
+             isOptionalNullableString(data, 'active_hold_id', 128) &&
+             data.moderation_status in ['pending', 'approved', 'rejected'] &&
+             isOptionalNullableString(data, 'reject_reason', 500) &&
+             data.created_at is timestamp &&
+             data.updated_at is timestamp;
+    }
+
+    function isValidModerationLog(data) {
+      let allowed = ['admin_id', 'action', 'reason', 'created_at'];
+      return hasRequiredFields(data, ['admin_id', 'action', 'created_at']) &&
+             hasOnlyAllowedFields(data, allowed) &&
+             isValidId(data.admin_id) &&
+             data.action in ['approve', 'reject', 'hide'] &&
+             isOptionalNullableString(data, 'reason', 500) &&
+             data.created_at is timestamp;
     }
 
     function isValidHold(data) {
-      return data.keys().hasAll(['itemId', 'requesterId', 'sellerId', 'expiresAt', 'status', 'createdAt']) &&
-             data.keys().hasOnly(['id', 'itemId', 'requesterId', 'requesterName', 'sellerId', 'expiresAt', 'meetupPoint', 'status', 'createdAt']) &&
-             data.requesterId == request.auth.uid &&
-             data.requesterId != data.sellerId &&
-             data.status in ['active', 'completed', 'cancelled', 'expired'] &&
-             data.createdAt == request.time;
+      let required = [
+        'item_id', 'item_title', 'seller_id', 'requester_id',
+        'hold_start_time', 'hold_expires_at', 'hold_status',
+        'created_at', 'updated_at'
+      ];
+      let allowed = [
+        'item_id', 'item_title', 'primary_image', 'seller_id', 'seller_summary',
+        'requester_id', 'requester_summary', 'meetup_summary',
+        'hold_start_time', 'hold_expires_at', 'hold_status', 'cancel_reason',
+        'created_at', 'updated_at'
+      ];
+      return hasRequiredFields(data, required) &&
+             hasOnlyAllowedFields(data, allowed) &&
+             isValidId(data.item_id) &&
+             data.item_title is string && data.item_title.size() >= 1 && data.item_title.size() <= 100 &&
+             isOptionalNullableString(data, 'primary_image', 200000) &&
+             isValidId(data.seller_id) &&
+             (!('seller_summary' in data) || data.seller_summary == null ||
+              (data.seller_summary is map && data.seller_summary.keys().size() <= 10)) &&
+             isValidId(data.requester_id) &&
+             (!('requester_summary' in data) || data.requester_summary == null ||
+              (data.requester_summary is map && data.requester_summary.keys().size() <= 10)) &&
+             (!('meetup_summary' in data) || data.meetup_summary == null ||
+              (data.meetup_summary is map && data.meetup_summary.keys().size() <= 10) ||
+              (data.meetup_summary is string && data.meetup_summary.size() <= 500)) &&
+             data.hold_start_time is timestamp &&
+             data.hold_expires_at is timestamp &&
+             data.hold_expires_at > data.hold_start_time &&
+             data.hold_status in ['active', 'cancelled', 'converted', 'expired'] &&
+             isOptionalNullableString(data, 'cancel_reason', 500) &&
+             data.created_at is timestamp &&
+             data.updated_at is timestamp;
     }
 
-    // -------------------------------------------------------------------------
-    // Collection Matches
-    // -------------------------------------------------------------------------
+    function isValidMeetup(data) {
+      let required = [
+        'hold_id', 'item_id', 'seller_id', 'buyer_id',
+        'location_name', 'proposed_time', 'status', 'created_at', 'updated_at'
+      ];
+      let allowed = [
+        'hold_id', 'item_id', 'seller_id', 'buyer_id',
+        'location_id', 'location_name', 'proposed_time', 'status', 'note',
+        'created_at', 'updated_at'
+      ];
+      return hasRequiredFields(data, required) &&
+             hasOnlyAllowedFields(data, allowed) &&
+             isValidId(data.hold_id) &&
+             isValidId(data.item_id) &&
+             isValidId(data.seller_id) &&
+             isValidId(data.buyer_id) &&
+             isOptionalNullableString(data, 'location_id', 128) &&
+             data.location_name is string && data.location_name.size() >= 1 && data.location_name.size() <= 200 &&
+             (data.proposed_time is timestamp ||
+              (data.proposed_time is string && data.proposed_time.size() >= 1 && data.proposed_time.size() <= 64)) &&
+             data.status in ['proposed', 'confirmed', 'rescheduled', 'cancelled', 'completed'] &&
+             isOptionalNullableString(data, 'note', 500) &&
+             data.created_at is timestamp &&
+             data.updated_at is timestamp;
+    }
+
+    function isValidTransaction(data) {
+      let required = [
+        'item_id', 'hold_id', 'seller_id', 'buyer_id',
+        'final_amount', 'payment_method', 'current_status',
+        'created_at', 'updated_at'
+      ];
+      let allowed = [
+        'item_id', 'item_title', 'hold_id', 'seller_id', 'buyer_id',
+        'final_amount', 'payment_method', 'current_status', 'completed_at',
+        'created_at', 'updated_at'
+      ];
+      return hasRequiredFields(data, required) &&
+             hasOnlyAllowedFields(data, allowed) &&
+             isValidId(data.item_id) &&
+             (!('item_title' in data) || data.item_title == null ||
+              (data.item_title is string && data.item_title.size() >= 1 && data.item_title.size() <= 100)) &&
+             isValidId(data.hold_id) &&
+             isValidId(data.seller_id) &&
+             isValidId(data.buyer_id) &&
+             data.final_amount is number && data.final_amount >= 0 && data.final_amount <= 1000000000 &&
+             data.payment_method in ['cash', 'bank_transfer', 'free'] &&
+             data.current_status in ['pending', 'completed', 'disputed', 'cancelled'] &&
+             (!('completed_at' in data) || data.completed_at == null || data.completed_at is timestamp) &&
+             data.created_at is timestamp &&
+             data.updated_at is timestamp;
+    }
+
+    function isValidTxStatusLog(data) {
+      let allowed = ['from_status', 'to_status', 'changed_by', 'reason', 'timestamp'];
+      return hasRequiredFields(data, ['to_status', 'changed_by', 'timestamp']) &&
+             hasOnlyAllowedFields(data, allowed) &&
+             isOptionalNullableString(data, 'from_status', 50) &&
+             data.to_status is string && data.to_status.size() >= 1 && data.to_status.size() <= 50 &&
+             isValidId(data.changed_by) &&
+             isOptionalNullableString(data, 'reason', 500) &&
+             data.timestamp is timestamp;
+    }
+
+    // =========================================================================
+    // Cross-Document Atomic State Machine Helpers
+    // =========================================================================
+
+    function isValidAtomicHoldPlacement(itemId) {
+      let holdAfter = getAfter(/databases/$(database)/documents/holds/$(incoming().active_hold_id));
+      return isSignedIn() &&
+             request.auth.uid != existing().seller_id &&
+             existing().moderation_status == 'approved' &&
+             existing().item_status == 'available' &&
+             existing().get('active_hold_id', null) == null &&
+             incoming().item_status == 'held' &&
+             incoming().active_hold_id is string &&
+             isValidId(incoming().active_hold_id) &&
+             incoming().diff(existing()).affectedKeys().hasOnly(['item_status', 'active_hold_id', 'updated_at']) &&
+             incoming().updated_at == request.time &&
+             holdAfter != null &&
+             holdAfter.data.item_id == itemId &&
+             holdAfter.data.requester_id == request.auth.uid &&
+             holdAfter.data.hold_status == 'active';
+    }
+
+    function isValidHoldResolution() {
+      let activeHold = get(/databases/$(database)/documents/holds/$(existing().active_hold_id));
+      return isSignedIn() &&
+             existing().item_status == 'held' &&
+             existing().active_hold_id is string &&
+             incoming().item_status in ['completed', 'available'] &&
+             incoming().get('active_hold_id', null) == null &&
+             incoming().diff(existing()).affectedKeys().hasOnly(['item_status', 'active_hold_id', 'updated_at']) &&
+             incoming().updated_at == request.time &&
+             activeHold != null &&
+             (request.auth.uid == existing().seller_id ||
+              request.auth.uid == activeHold.data.requester_id ||
+              (incoming().item_status == 'available' && activeHold.data.hold_expires_at <= request.time));
+    }
+
+    function canRequesterCreateHold(holdId, data) {
+      let requesterDoc = get(/databases/$(database)/documents/users/$(request.auth.uid));
+      let itemBefore = get(/databases/$(database)/documents/items/$(data.item_id));
+      let itemAfter = getAfter(/databases/$(database)/documents/items/$(data.item_id));
+      return requesterDoc != null &&
+             requesterDoc.data.current_trust_score >= 50 &&
+             requesterDoc.data.status == 'active' &&
+             (requesterDoc.data.get('hold_locked_until', null) == null ||
+              !(requesterDoc.data.hold_locked_until is timestamp) ||
+              requesterDoc.data.hold_locked_until <= request.time) &&
+             itemBefore != null &&
+             itemBefore.data.seller_id == data.seller_id &&
+             itemBefore.data.moderation_status == 'approved' &&
+             itemBefore.data.item_status == 'available' &&
+             itemAfter != null &&
+             itemAfter.data.item_status == 'held' &&
+             itemAfter.data.get('active_hold_id', null) == holdId;
+    }
+
+    // =========================================================================
+    // 1. /users/{userId} + 2. /users/{userId}/trust_history/{logId}
+    // =========================================================================
 
     match /users/{userId} {
       allow get: if isSignedIn();
       allow list: if isAdmin();
-      allow create: if isVerified() && isValidId(userId) && isValidUser(incoming()) && incoming().role == 'user';
-      allow update: if isVerified() && (
-        (isOwner(userId) && isValidUser(incoming()) && 
-         incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL'])) ||
-        isAdmin()
-      );
+
+      allow create: if isOwner(userId) &&
+                    isValidId(userId) &&
+                    isValidUser(incoming()) &&
+                    (!('uid' in incoming()) || incoming().uid == userId) &&
+                    incoming().current_trust_score == 100 &&
+                    incoming().status == 'active' &&
+                    (incoming().role == 'student' ||
+                     (incoming().role == 'admin' && isBootstrapAdminEmail())) &&
+                    incoming().created_at == request.time &&
+                    incoming().updated_at == request.time;
+
+      allow update: if isValidUser(incoming()) && (
+                      isAdmin() ||
+                      // Owner updating own editable profile fields only
+                      (isOwner(userId) &&
+                       incoming().diff(existing()).affectedKeys().hasOnly([
+                         'student_id_code', 'full_name', 'phone_number', 'avatar_url', 'updated_at'
+                       ]) &&
+                       incoming().updated_at == request.time) ||
+                      // Controlled trust score delta during tx completion (+5) or hold cancel/expiry (-10)
+                      (isSignedIn() &&
+                       incoming().diff(existing()).affectedKeys().hasOnly([
+                         'current_trust_score', 'hold_locked_until', 'updated_at'
+                       ]) &&
+                       incoming().current_trust_score is int &&
+                       incoming().current_trust_score >= 0 &&
+                       incoming().current_trust_score <= 200 &&
+                       (incoming().current_trust_score - existing().current_trust_score in [5, -10] ||
+                        (incoming().current_trust_score == 0 && existing().current_trust_score > 0 && existing().current_trust_score < 10) ||
+                        (incoming().current_trust_score == 200 && existing().current_trust_score > 195 && existing().current_trust_score < 200)) &&
+                       incoming().updated_at == request.time)
+                    );
+
+      allow delete: if isAdmin();
+
+      // 2. Append-only Immutable Trust Score Ledger
+      match /trust_history/{logId} {
+        allow read: if isOwner(userId) || isAdmin();
+
+        allow create: if isValidId(logId) &&
+                      isValidTrustHistoryLog(incoming()) &&
+                      getAfter(/databases/$(database)/documents/users/$(userId)) != null &&
+                      (isAdmin() ||
+                       (isSignedIn() &&
+                        incoming().event_type in ['INIT', 'COMPLETE_TX', 'CANCEL_HOLD', 'EXPIRED_HOLD'] &&
+                        (incoming().score_change in [0, 5, -10] ||
+                         (incoming().event_type == 'INIT' && isOwner(userId) && incoming().score_change == 100)) &&
+                        incoming().balance_after <= 200 &&
+                        incoming().created_at == request.time));
+
+        allow update, delete: if false;
+      }
+    }
+
+    // =========================================================================
+    // 3. /categories/{categoryId}
+    // =========================================================================
+
+    match /categories/{categoryId} {
+      allow read: if true;
+      allow create, update: if isAdmin() && isValidId(categoryId) && isValidCategory(incoming());
       allow delete: if isAdmin();
     }
+
+    // =========================================================================
+    // 4. /subjects/{subjectId}
+    // =========================================================================
+
+    match /subjects/{subjectId} {
+      allow read: if true;
+      allow create, update: if isAdmin() && isValidId(subjectId) && isValidSubject(incoming());
+      allow delete: if isAdmin();
+    }
+
+    // =========================================================================
+    // 5. /meetup_locations/{locationId}
+    // =========================================================================
+
+    match /meetup_locations/{locationId} {
+      allow read: if true;
+      allow create, update: if isAdmin() && isValidId(locationId) && isValidMeetupLocation(incoming());
+      allow delete: if isAdmin();
+    }
+
+    // =========================================================================
+    // 6. /items/{itemId} + 7. /items/{itemId}/moderation_logs/{modLogId}
+    // =========================================================================
 
     match /items/{itemId} {
-      allow read: if true; // Cho phép mọi người xem danh sách để tăng tính trải nghiệm
-      allow create: if isVerified() && isValidId(itemId) && isValidItem(incoming());
-      allow update: if isVerified() && (
-        (isOwner(existing().sellerId) && isValidItem(incoming()) &&
-         incoming().diff(existing()).affectedKeys().hasOnly(['title', 'description', 'category', 'subject', 'condition', 'price', 'imageUrl', 'status', 'updatedAt']) &&
-         incoming().updatedAt == request.time) ||
-        // Cho phép đổi trạng thái sang 'held' (logic này được dùng khi sinh viên đặt giữ đồ)
-        (incoming().status == 'held' && existing().status == 'available' && 
-         incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt']) &&
-         incoming().updatedAt == request.time) ||
-        isAdmin()
-      );
-      allow delete: if isVerified() && (isOwner(existing().sellerId) || isAdmin());
+      allow read: if (resource.data.moderation_status == 'approved' && resource.data.item_status != 'hidden') ||
+                  (isSignedIn() && resource.data.seller_id == request.auth.uid) ||
+                  isAdmin();
+
+      allow create: if isSignedIn() &&
+                    isValidId(itemId) &&
+                    isValidItem(incoming()) &&
+                    incoming().seller_id == request.auth.uid &&
+                    incoming().item_status == 'available' &&
+                    incoming().get('active_hold_id', null) == null &&
+                    (incoming().moderation_status == 'pending' ||
+                     (isAdmin() && incoming().moderation_status == 'approved')) &&
+                    incoming().created_at == request.time &&
+                    incoming().updated_at == request.time;
+
+      allow update: if isValidItem(incoming()) && (
+                      isAdmin() ||
+                      // Seller editing own item while not held or completed
+                      (isOwner(existing().seller_id) &&
+                       existing().item_status != 'held' &&
+                       existing().item_status != 'completed' &&
+                       incoming().seller_id == existing().seller_id &&
+                       incoming().created_at == existing().created_at &&
+                       incoming().get('active_hold_id', null) == existing().get('active_hold_id', null) &&
+                       incoming().item_status in ['available', 'hidden'] &&
+                       (incoming().moderation_status == 'pending' ||
+                        (incoming().diff(existing()).affectedKeys().hasOnly(['item_status', 'updated_at']) &&
+                         incoming().moderation_status == existing().moderation_status)) &&
+                       incoming().updated_at == request.time) ||
+                      // Requester placing an atomic Hold (available -> held)
+                      ('active_hold_id' in incoming() &&
+                       incoming().active_hold_id is string &&
+                       isValidAtomicHoldPlacement(itemId)) ||
+                      // Completing or Releasing/Cancelling a Hold (held -> completed | available)
+                      ('active_hold_id' in existing() &&
+                       existing().active_hold_id is string &&
+                       isValidHoldResolution())
+                    );
+
+      allow delete: if (isOwner(existing().seller_id) && existing().item_status != 'held') || isAdmin();
+
+      // 7. Append-only Moderation Audit Logs
+      match /moderation_logs/{modLogId} {
+        allow read: if isAdmin() || isItemSeller(itemId);
+
+        allow create: if isAdmin() &&
+                      isValidId(modLogId) &&
+                      isValidModerationLog(incoming()) &&
+                      getAfter(/databases/$(database)/documents/items/$(itemId)) != null &&
+                      incoming().admin_id == request.auth.uid &&
+                      incoming().created_at == request.time;
+
+        allow update, delete: if false;
+      }
     }
 
+    // =========================================================================
+    // 8. /holds/{holdId}
+    // =========================================================================
+
     match /holds/{holdId} {
-      allow read: if isSignedIn() && (isOwner(resource.data.requesterId) || isOwner(resource.data.sellerId) || isAdmin());
-      allow create: if isVerified() && isValidId(holdId) && isValidHold(incoming()) &&
-                    get(/databases/$(database)/documents/items/$(incoming().itemId)).data.status == 'available';
-      allow update: if isVerified() && (
-        ( (isOwner(existing().requesterId) || isOwner(existing().sellerId)) &&
-          incoming().diff(existing()).affectedKeys().hasOnly(['status']) &&
-          incoming().status in ['completed', 'cancelled'] ) ||
-        isAdmin()
-      );
+      allow read: if isSignedIn() && (
+                    resource.data.requester_id == request.auth.uid ||
+                    resource.data.seller_id == request.auth.uid ||
+                    resource.data.hold_expires_at <= request.time ||
+                    isAdmin()
+                  );
+
+      allow create: if isSignedIn() &&
+                    isValidId(holdId) &&
+                    isValidHold(incoming()) &&
+                    incoming().requester_id == request.auth.uid &&
+                    incoming().requester_id != incoming().seller_id &&
+                    incoming().hold_status == 'active' &&
+                    incoming().created_at == request.time &&
+                    incoming().updated_at == request.time &&
+                    canRequesterCreateHold(holdId, incoming());
+
+      allow update: if isValidHold(incoming()) && (
+                      isAdmin() ||
+                      (isSignedIn() &&
+                       existing().hold_status == 'active' &&
+                       incoming().diff(existing()).affectedKeys().hasOnly([
+                         'hold_status', 'cancel_reason', 'updated_at'
+                       ]) &&
+                       incoming().updated_at == request.time &&
+                       (
+                         ((isOwner(existing().requester_id) || isOwner(existing().seller_id)) &&
+                          incoming().hold_status in ['cancelled', 'converted']) ||
+                         (existing().hold_expires_at <= request.time &&
+                          incoming().hold_status == 'expired')
+                       ))
+                    );
+
       allow delete: if isAdmin();
+    }
+
+    // =========================================================================
+    // 9. /meetups/{meetupId}
+    // =========================================================================
+
+    match /meetups/{meetupId} {
+      allow read: if isSignedIn() && (
+                    resource.data.buyer_id == request.auth.uid ||
+                    resource.data.seller_id == request.auth.uid ||
+                    isAdmin()
+                  );
+
+      allow create: if isSignedIn() &&
+                    isValidId(meetupId) &&
+                    isValidMeetup(incoming()) &&
+                    incoming().buyer_id == request.auth.uid &&
+                    incoming().buyer_id != incoming().seller_id &&
+                    incoming().status == 'proposed' &&
+                    incoming().created_at == request.time &&
+                    incoming().updated_at == request.time;
+
+      allow update: if isValidMeetup(incoming()) && (
+                      isAdmin() ||
+                      (isSignedIn() &&
+                       (isOwner(existing().buyer_id) || isOwner(existing().seller_id)) &&
+                       incoming().diff(existing()).affectedKeys().hasOnly([
+                         'proposed_time', 'location_id', 'location_name', 'status', 'note', 'updated_at'
+                       ]) &&
+                       incoming().status in ['proposed', 'confirmed', 'rescheduled', 'cancelled', 'completed'] &&
+                       incoming().updated_at == request.time)
+                    );
+
+      allow delete: if isAdmin();
+    }
+
+    // =========================================================================
+    // 10. /transactions/{txId} + 11. /transactions/{txId}/status_logs/{logId}
+    // =========================================================================
+
+    match /transactions/{txId} {
+      allow read: if isSignedIn() && (
+                    resource.data.seller_id == request.auth.uid ||
+                    resource.data.buyer_id == request.auth.uid ||
+                    isAdmin()
+                  );
+
+      allow create: if isSignedIn() &&
+                    isValidId(txId) &&
+                    isValidTransaction(incoming()) &&
+                    (incoming().buyer_id == request.auth.uid ||
+                     incoming().seller_id == request.auth.uid ||
+                     isAdmin()) &&
+                    incoming().seller_id != incoming().buyer_id &&
+                    incoming().current_status in ['pending', 'completed'] &&
+                    incoming().created_at == request.time &&
+                    incoming().updated_at == request.time;
+
+      allow update: if isValidTransaction(incoming()) && (
+                      isAdmin() ||
+                      (isSignedIn() &&
+                       (isOwner(existing().buyer_id) || isOwner(existing().seller_id)) &&
+                       incoming().diff(existing()).affectedKeys().hasOnly([
+                         'current_status', 'completed_at', 'updated_at'
+                       ]) &&
+                       incoming().current_status in ['completed', 'disputed', 'cancelled'] &&
+                       incoming().updated_at == request.time)
+                    );
+
+      allow delete: if isAdmin();
+
+      // 11. Append-only Transaction Status Logs
+      match /status_logs/{logId} {
+        allow read: if isAdmin() || isTransactionParticipant(txId);
+
+        allow create: if isSignedIn() &&
+                      isValidId(logId) &&
+                      isValidTxStatusLog(incoming()) &&
+                      isTransactionParticipantAfter(txId) &&
+                      incoming().changed_by == request.auth.uid &&
+                      incoming().timestamp == request.time;
+
+        allow update, delete: if false;
+      }
     }
   }
 }
