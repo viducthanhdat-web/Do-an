@@ -1,0 +1,609 @@
+/' ==============================================================================
+   HỆ THỐNG THƯ VIỆN / SÀN TRAO ĐỔI GIÁO TRÌNH & THIẾT BỊ CŨ TRONG TRƯỜNG HỌC
+   ============================================================================== '/
+
+' ==============================================================================
+' PHẦN A – SEQUENCE DIAGRAMS (SD01 - SD09)
+' ==============================================================================
+
+@startuml SD01_DangNhap_XacThuc
+title SD01 - Đăng nhập và xác thực người dùng
+skinparam monochrome true
+autonumber
+
+actor "Người dùng" as User
+participant "Web Client" as Client
+participant "Firebase Auth" as Auth
+participant "Cloud Firestore" as DB
+
+User -> Client: Nhập email trường & mật khẩu
+Client -> Auth: signInWithEmailAndPassword(email, password)
+
+alt Xác thực thành công
+    Auth --> Client: UserCredential (UID, ID Token kèm Claims)
+    Client -> DB: getDoc(users/{userId})
+    DB --> Client: Dữ liệu tài khoản (status, role, trust_score)
+    
+    alt status == 'active'
+        Client --> User: Điều hướng vào hệ thống
+    else status == 'banned' hoặc 'suspended'
+        Client -> Auth: signOut()
+        Client --> User: Báo tài khoản bị khóa
+    end
+else Xác thực thất bại
+    Auth --> Client: Lỗi xác thực
+    Client --> User: Báo sai email hoặc mật khẩu
+end
+@enduml
+
+
+@startuml SD02_DangTinVatPham
+title SD02 - Đăng tin vật phẩm
+skinparam monochrome true
+autonumber
+
+actor "Người bán" as Seller
+participant "Web Client" as Client
+participant "Firebase Storage" as Storage
+participant "Cloud Firestore" as DB
+
+Seller -> Client: Nhập thông tin vật phẩm & chọn ảnh
+Client -> Storage: uploadBytes(file)
+Storage --> Client: Trả về downloadURL
+
+Client -> DB: addDoc(items, data) [status='available', moderation='pending']
+
+alt Ghi dữ liệu thành công
+    DB --> Client: Trả về itemId
+    Client --> Seller: Báo đăng tin thành công (chờ duyệt)
+else Lỗi phân quyền / Dữ liệu sai
+    DB --> Client: Báo lỗi Permission Denied
+    Client --> Seller: Báo đăng tin thất bại
+end
+@enduml
+
+
+@startuml SD03_KiemDuyetBaiDang
+title SD03 - Kiểm duyệt bài đăng bởi Admin
+skinparam monochrome true
+autonumber
+
+actor "Admin" as Admin
+participant "Web Client" as Client
+participant "Cloud Firestore" as DB
+
+Admin -> Client: Mở danh sách bài chờ duyệt
+Client -> DB: getDocs(items where moderation_status == 'pending')
+DB --> Client: Danh sách bài đăng
+
+alt Phê duyệt bài đăng
+    Admin -> Client: Chọn Duyệt bài
+    Client -> DB: updateDoc(items/{id}, moderation_status='approved')
+    Client -> DB: addDoc(items/{id}/moderation_logs, action='approve')
+    DB --> Client: Xác nhận cập nhật
+    Client --> Admin: Báo duyệt bài thành công
+else Từ chối bài đăng
+    Admin -> Client: Chọn Từ chối (nhập lý do)
+    Client -> DB: updateDoc(items/{id}, moderation_status='rejected')
+    Client -> DB: addDoc(items/{id}/moderation_logs, action='reject', reason)
+    DB --> Client: Xác nhận cập nhật
+    Client --> Admin: Báo đã từ chối bài đăng
+end
+@enduml
+
+
+@startuml SD04_TimKiem_LocVatPham
+title SD04 - Tìm kiếm và lọc vật phẩm
+skinparam monochrome true
+autonumber
+
+actor "Người nhận" as User
+participant "Web Client" as Client
+participant "Cloud Firestore" as DB
+
+User -> Client: Nhập từ khóa, chọn môn học/danh mục
+Client -> DB: getDocs(query: moderation='approved', status='available', category)
+DB --> Client: Danh sách vật phẩm phù hợp
+Client --> User: Hiển thị kết quả tìm kiếm
+@enduml
+
+
+@startuml SD05_GiuChoVatPham
+title SD05 - Giữ chỗ vật phẩm (Hold 24–48 giờ)
+skinparam monochrome true
+autonumber
+
+actor "Người nhận" as Req
+participant "Web Client" as Client
+participant "Cloud Functions" as CF
+participant "Cloud Firestore" as DB
+
+Req -> Client: Bấm Giữ chỗ (chọn 24h hoặc 48h)
+Client -> CF: createHoldOrder(itemId, duration)
+
+CF -> DB: get(users/{requesterId})
+DB --> CF: current_trust_score
+
+alt Điểm uy tín < 50
+    CF --> Client: Lỗi điểm uy tín thấp (< 50)
+    Client --> Req: Báo không đủ điều kiện giữ chỗ
+else Điểm uy tín >= 50
+    CF -> DB: runTransaction()
+    CF -> DB: transaction.get(items/{itemId})
+    DB --> CF: itemData
+    
+    alt item_status == 'available' && active_hold_id == null && seller_id != requesterId
+        CF -> DB: transaction.set(holds/{holdId}, data) [status='active', expiresAt]
+        CF -> DB: transaction.update(items/{itemId}, [status='held', active_hold_id=holdId])
+        DB --> CF: Commit thành công
+        CF --> Client: Giữ chỗ thành công
+        Client --> Req: Thông báo giữ chỗ thành công
+    else Vật phẩm đã bị giữ hoặc tự giữ đồ của mình
+        CF -> DB: Rollback transaction
+        CF --> Client: Lỗi không thể giữ chỗ
+        Client --> Req: Thông báo giữ chỗ thất bại
+    end
+end
+@enduml
+
+
+@startuml SD06_RaceCondition_Concurrency
+title SD06 - Hai người cùng giữ chỗ một vật phẩm (Race Condition)
+skinparam monochrome true
+autonumber
+
+actor "Sinh viên A" as UserA
+participant "Client A" as ClientA
+participant "Cloud Function A" as CFA
+participant "Firestore Engine" as DB
+participant "Cloud Function B" as CFB
+participant "Client B" as ClientB
+actor "Sinh viên B" as UserB
+
+UserA -> ClientA: Bấm Giữ chỗ (t = 0s)
+UserB -> ClientB: Bấm Giữ chỗ (t = 0.001s)
+
+ClientA -> CFA: createHoldOrder(itemId)
+ClientB -> CFB: createHoldOrder(itemId)
+
+CFA -> DB: Transaction A: get(items/{itemId})
+CFB -> DB: Transaction B: get(items/{itemId})
+DB --> CFA: Snapshot A (Status: AVAILABLE, Version: 1)
+DB --> CFB: Snapshot B (Status: AVAILABLE, Version: 1)
+
+CFA -> DB: Transaction A: Commit [status='held', active_hold_id=HoldA]
+DB --> CFA: Commit A thành công (Version tăng lên: 2)
+CFA --> ClientA: Báo giữ chỗ thành công
+ClientA --> UserA: "Giữ chỗ thành công!"
+
+CFB -> DB: Transaction B: Commit [status='held', active_hold_id=HoldB]
+note over DB: Snapshot B đã cũ (Version 1 != 2)\nKích hoạt RETRY tự động
+
+DB --> CFB: Yêu cầu chạy lại Transaction B
+CFB -> DB: Transaction B (Retry): get(items/{itemId})
+DB --> CFB: Snapshot mới (Status: HELD, active_hold_id=HoldA)
+
+CFB -> CFB: Kiểm tra thất bại: item_status != 'available'
+CFB -> DB: Rollback Transaction B
+CFB --> ClientB: Báo lỗi "Vật phẩm đã được người khác giữ"
+ClientB --> UserB: "Rất tiếc! Món đồ đã có người giữ trước."
+@enduml
+
+
+@startuml SD07_HenGap_XacNhanGiaoDich
+title SD07 - Hẹn gặp và xác nhận giao dịch
+skinparam monochrome true
+autonumber
+
+actor "Người nhận" as Buyer
+participant "Client (Buyer)" as BuyerUI
+participant "Client (Seller)" as SellerUI
+actor "Người bán" as Seller
+participant "Cloud Functions" as CF
+participant "Cloud Firestore" as DB
+
+Buyer -> BuyerUI: Đề xuất lịch hẹn (địa điểm, giờ hẹn)
+BuyerUI -> DB: addDoc(meetups, [status='proposed'])
+
+DB -> SellerUI: Thông báo đề xuất lịch hẹn
+Seller -> SellerUI: Bấm Chấp nhận lịch hẹn
+SellerUI -> DB: updateDoc(meetups, [status='confirmed'])
+
+note over Buyer, Seller: Hai sinh viên gặp nhau tại trường, bàn giao sách
+
+Seller -> SellerUI: Bấm Xác nhận bàn giao thành công
+SellerUI -> CF: confirmTransaction(holdId, meetupId)
+
+CF -> DB: runTransaction()
+CF -> DB: update(holds/{id}, status='converted')
+CF -> DB: update(items/{id}, [status='completed', active_hold_id=null])
+CF -> DB: add(transactions, [status='completed'])
+CF -> DB: update(users, trust_score += 5) (cả 2 bên)
+CF -> DB: add(trust_history, +5) (cả 2 bên)
+DB --> CF: Commit thành công
+
+CF --> SellerUI: Báo hoàn tất (+5 điểm uy tín)
+CF --> BuyerUI: Báo hoàn tất (+5 điểm uy tín)
+@enduml
+
+
+@startuml SD08_TuDongGiaiPhongHold
+title SD08 - Tự động giải phóng vật phẩm khi Hold hết hạn
+skinparam monochrome true
+autonumber
+
+participant "Cloud Scheduler" as Cron
+participant "Cloud Functions" as CF
+participant "Cloud Firestore" as DB
+
+Cron -> CF: Kích hoạt định kỳ (mỗi 5 phút)
+CF -> DB: getDocs(holds where status=='active' and expires_at <= now)
+DB --> CF: Danh sách Hold quá hạn
+
+alt Không có Hold quá hạn
+    CF --> Cron: Kết thúc tác vụ
+else Có Hold quá hạn
+    loop Duyệt từng Hold quá hạn
+        CF -> DB: getDoc(items/{itemId})
+        DB --> CF: itemData
+        
+        alt item.active_hold_id == hold.id
+            CF -> DB: batch.update(items/{itemId}, [status='available', active_hold_id=null])
+        else Item đã chuyển sang Hold khác
+            note over CF: Bỏ qua update item để tránh mở khóa nhầm
+        end
+        
+        CF -> DB: batch.update(holds/{id}, [status='expired'])
+        CF -> DB: batch.update(users/{requesterId}, trust_score -= 10)
+        CF -> DB: batch.add(trust_history, -10 điểm)
+    end
+    
+    CF -> DB: batch.commit()
+    DB --> CF: Commit thành công
+    CF --> Cron: Hoàn tất giải phóng
+end
+@enduml
+
+
+@startuml SD09_CongTru_TrustScore
+title SD09 - Cộng/trừ điểm tín nhiệm Trust Score
+skinparam monochrome true
+autonumber
+
+participant "Sự kiện hệ thống" as Event
+participant "Cloud Functions" as CF
+participant "Cloud Firestore" as DB
+participant "Web Client" as Client
+
+Event -> CF: Kích hoạt cập nhật điểm (userId, changeAmount, eventType)
+CF -> DB: runTransaction: get(users/{userId})
+DB --> CF: current_trust_score
+
+CF -> CF: newScore = current_trust_score + changeAmount
+CF -> DB: update(users/{userId}, current_trust_score=newScore)
+CF -> DB: add(users/{userId}/trust_history, [score_change, balance_after=newScore])
+
+alt newScore < 50
+    CF -> DB: update(users/{userId}, [status='suspended', hold_locked_until])
+else newScore >= 50
+    note over CF: Duy trì trạng thái bình thường
+end
+
+DB --> CF: Commit transaction
+CF -> Client: Thông báo biến động điểm tín nhiệm
+@enduml
+
+
+' ==============================================================================
+' PHẦN B – ACTIVITY DIAGRAMS (AD01 - AD08)
+' ==============================================================================
+
+@startuml AD01_DangNhap_PhanQuyen
+title AD01 - Quy trình đăng nhập và phân quyền
+skinparam monochrome true
+
+|Người dùng|
+start
+:Nhập email trường (@*.edu.vn) và mật khẩu;
+:Bấm Đăng nhập;
+
+|Frontend Web|
+:Kiểm tra tính hợp lệ dữ liệu nhập;
+if (Dữ liệu hợp lệ?) then (Không)
+  :Báo lỗi định dạng;
+  stop
+else (Có)
+  :Gửi yêu cầu xác thực sang Firebase Auth;
+endif
+
+|Firebase Auth|
+if (Xác thực thành công?) then (Không)
+  :Báo lỗi sai thông tin;
+  |Frontend Web|
+  :Hiển thị thông báo đăng nhập thất bại;
+  stop
+else (Có)
+  :Cấp JWT ID Token chứa Claims (role);
+endif
+
+|Cloud Firestore|
+:Đọc thông tin hồ sơ users/{userId};
+
+|Frontend Web|
+if (Trạng thái tài khoản?) then (Bị khóa)
+  :Cưỡng chế đăng xuất;
+  :Báo tài khoản bị khóa;
+  stop
+else (Hoạt động)
+  if (Vai trò (role)?) then (Admin)
+    :Chuyển vào Admin Dashboard;
+  else (Student)
+    :Chuyển vào Trang chủ Sàn giao dịch;
+  endif
+endif
+stop
+@enduml
+
+
+@startuml AD02_DangTin_KiemDuyet
+title AD02 - Quy trình đăng tin và kiểm duyệt
+skinparam monochrome true
+
+|Người bán|
+start
+:Nhập thông tin vật phẩm và chọn ảnh;
+:Bấm Đăng tin;
+
+|Frontend Web|
+:Tải ảnh lên Firebase Storage;
+:Ghi bài viết mới vào Firestore (status='available', moderation='pending');
+
+|Người bán|
+:Nhận thông báo tin đang chờ duyệt;
+
+|Admin|
+:Mở danh sách bài chờ duyệt;
+:Kiểm tra nội dung và hình ảnh;
+
+if (Hợp lệ theo quy chế?) then (Hợp lệ)
+  :Bấm Phê duyệt;
+  |Cloud Firestore|
+  :Cập nhật moderation_status = 'approved';
+  :Ghi log kiểm duyệt;
+else (Vi phạm)
+  |Admin|
+  :Nhập lý do từ chối;
+  :Bấm Từ chối;
+  |Cloud Firestore|
+  :Cập nhật moderation_status = 'rejected';
+  :Ghi log kiểm duyệt kèm lý do;
+endif
+stop
+@enduml
+
+
+@startuml AD03_TimKiem_LuaChon
+title AD03 - Quy trình tìm kiếm và lựa chọn vật phẩm
+skinparam monochrome true
+
+|Người nhận|
+start
+:Truy cập sàn giao dịch;
+:Nhập từ khóa và chọn bộ lọc (môn học, đồ 0đ);
+
+|Cloud Firestore|
+:Truy vấn các bài đăng (moderation='approved', status='available');
+:Trả về danh sách kết quả;
+
+|Frontend Web|
+if (Có kết quả?) then (Không)
+  :Hiển thị thông báo không tìm thấy kết quả;
+  stop
+else (Có)
+  :Hiển thị danh sách vật phẩm;
+endif
+
+|Người nhận|
+:Chọn xem chi tiết một vật phẩm;
+if (Quyết định nhận/mua?) then (Không)
+  :Quay lại tìm kiếm;
+  stop
+else (Có)
+  :Bấm Giữ chỗ món đồ;
+endif
+stop
+@enduml
+
+
+@startuml AD04_GiuChoVatPham
+title AD04 - Quy trình giữ chỗ vật phẩm
+skinparam monochrome true
+
+|Người nhận|
+start
+:Bấm Giữ chỗ (chọn thời hạn 24h/48h);
+
+|Cloud Functions|
+:Xác thực người dùng;
+:Đọc điểm tín nhiệm của người nhận;
+
+if (current_trust_score >= 50?) then (Không)
+  :Báo lỗi điểm tín nhiệm thấp, bị khóa quyền;
+  stop
+else (Có)
+  :Mở Firestore Transaction;
+endif
+
+|Cloud Firestore|
+:Đọc Document items/{itemId};
+
+|Cloud Functions|
+if (status == 'available' && active_hold_id == null && seller_id != requesterId?) then (Không hợp lệ)
+  :Rollback Transaction;
+  :Báo lỗi không thể giữ chỗ;
+  stop
+else (Hợp lệ)
+  :Tạo Document holds (status='active', expiresAt=now+duration);
+  :Cập nhật items (status='held', active_hold_id=holdId);
+  :Commit Transaction;
+endif
+
+|Frontend Web|
+:Hiển thị thông báo Giữ chỗ thành công;
+:Đếm ngược thời gian và chuyển sang hẹn gặp;
+stop
+@enduml
+
+
+@startuml AD05_XuLy_RaceCondition
+title AD05 - Quy trình xử lý Race Condition khi hai người cùng giữ chỗ
+skinparam monochrome true
+
+|Sinh viên A|
+start
+:Bấm Giữ chỗ (t);
+
+|Sinh viên B|
+start
+:Bấm Giữ chỗ (t + 1ms);
+
+|Cloud Functions|
+fork
+  :Transaction A nhận yêu cầu;
+fork again
+  :Transaction B nhận yêu cầu;
+end fork
+
+|Cloud Firestore|
+:Transaction A và B cùng đọc items/{itemId} (Đều thấy: AVAILABLE, Version: 1);
+
+if (Commit nào đến trước?) then (Transaction A đến trước)
+  :Chấp thuận Commit A;
+  :Chuyển items sang HELD (Version: 2);
+  |Sinh viên A|
+  :Thông báo "Giữ chỗ THÀNH CÔNG";
+  stop
+else (Transaction B đến sau)
+endif
+
+|Cloud Firestore|
+:Phát hiện xung đột phiên bản (Version 1 != 2);
+:Từ chối Commit B và kích hoạt Retry tự động;
+
+|Cloud Functions|
+:Transaction B đọc lại Document items/{itemId};
+:Thấy trạng thái mới: HELD;
+:Kiểm tra thất bại (status != available);
+:Rollback Transaction B;
+
+|Sinh viên B|
+:Thông báo "Món đồ đã được người khác giữ trước";
+stop
+@enduml
+
+
+@startuml AD06_HenGap_HoanTatGiaoDich
+title AD06 - Quy trình hẹn gặp và hoàn tất giao dịch
+skinparam monochrome true
+
+|Người nhận|
+start
+:Đề xuất thời gian và điểm hẹn tại trường;
+
+|Người bán|
+:Xem đề xuất lịch hẹn;
+if (Đồng ý?) then (Không)
+  :Đề xuất lại thời gian khác;
+  detach
+else (Đồng ý)
+  :Bấm Chấp nhận lịch hẹn;
+endif
+
+:Hai bên đến điểm hẹn gặp mặt;
+|Người nhận|
+:Kiểm tra tình trạng sách/thiết bị thực tế;
+
+if (Đồng ý nhận?) then (Không)
+  :Hủy giao dịch tại chỗ;
+  stop
+else (Đồng ý)
+  |Người bán|
+  :Bấm Xác nhận bàn giao thành công;
+  
+  |Cloud Functions|
+  :Chạy Transaction hoàn tất:
+  - holds.status = 'converted'
+  - items.status = 'completed'
+  - items.active_hold_id = null
+  - Tạo transactions hoàn tất
+  - Cộng +5 điểm tín nhiệm cho 2 bên;
+  
+  |Frontend Web|
+  :Báo giao dịch thành công cho cả hai sinh viên;
+  stop
+endif
+@enduml
+
+
+@startuml AD07_TuDongGiaiPhong_Hold
+title AD07 - Quy trình tự động giải phóng Hold hết hạn
+skinparam monochrome true
+
+|Cloud Scheduler|
+start
+:Kích hoạt Cronjob định kỳ mỗi 5 phút;
+
+|Cloud Functions|
+:Quét các Hold có status == 'active' và expires_at <= now;
+
+if (Có Hold quá hạn?) then (Không)
+  :Kết thúc tác vụ;
+  stop
+else (Có)
+  repeat
+    :Lấy bản ghi Hold quá hạn tiếp theo;
+    |Cloud Firestore|
+    :Đọc items/{itemId};
+    |Cloud Functions|
+    :Đánh dấu holds.status = 'expired';
+    if (item.active_hold_id == hold.id?) then (Khớp)
+      :Thêm lệnh mở khóa item vào Batch (status='available', active_hold_id=null);
+    else (Không khớp)
+      :Bỏ qua không cập nhật item;
+    endif
+    :Thêm lệnh trừ 10 điểm uy tín vào Batch;
+    :Thêm lệnh ghi log trust_history vào Batch;
+  repeat while (Còn bản ghi?) is (Còn) not (Hết)
+  
+  :Commit toàn bộ Batch;
+  stop
+endif
+@enduml
+
+
+@startuml AD08_CapNhat_TrustScore
+title AD08 - Quy trình cập nhật Trust Score
+skinparam monochrome true
+
+|Hệ thống|
+start
+:Phát sinh sự kiện (Hoàn tất giao dịch / Hủy / Quá hạn / Bùng hẹn);
+
+|Cloud Functions|
+:Đọc điểm hiện tại từ users/{userId};
+:Tính newScore = current_trust_score + changeAmount;
+:Ghi log chi tiết vào subcollection trust_history;
+
+if (newScore < 50?) then (Có)
+  :Gán trạng thái status = 'suspended' (khóa quyền giữ chỗ);
+else (Không)
+  :Duy trì trạng thái bình thường;
+endif
+
+|Cloud Firestore|
+:Cập nhật users/{userId};
+
+|Frontend Web|
+:Cập nhật hiển thị điểm uy tín mới cho sinh viên;
+stop
+@enduml
