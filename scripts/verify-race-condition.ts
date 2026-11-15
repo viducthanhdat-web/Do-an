@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { validateHoldWindow } from '../src/lib/exchangeService';
+import { toSlugVi } from '../src/lib/utils';
 
 type DocMap = Map<string, { version: number; data: Record<string, any> }>;
 
@@ -9,7 +10,7 @@ interface SimStore {
   holds: DocMap;
   meetups: DocMap;
   transactions: DocMap;
-  trustHistory: Array<{ uid: string; data: Record<string, any> }>;
+  trustHistory: Array<{ uid: string; logId?: string; data: Record<string, any> }>;
   nextId: number;
 }
 
@@ -93,7 +94,7 @@ interface SimTx {
   get: (col: CollectionName, id: string) => Promise<Record<string, any> | null>;
   set: (col: CollectionName, id: string, data: Record<string, any>) => void;
   update: (col: CollectionName, id: string, patch: Record<string, any>) => void;
-  recordTrustLog: (uid: string, data: Record<string, any>) => void;
+  recordTrustLog: (uid: string, data: Record<string, any>, logId?: string) => void;
 }
 
 /**
@@ -140,9 +141,9 @@ async function runSimulatedTransaction<T>(
           });
         });
       },
-      recordTrustLog(uid, data) {
+      recordTrustLog(uid, data, logId) {
         pendingWrites.push(() => {
-          store.trustHistory.push({ uid, data: structuredClone(data) });
+          store.trustHistory.push({ uid, logId, data: structuredClone(data) });
         });
       },
     };
@@ -253,6 +254,40 @@ async function placeHoldInSim(
   });
 }
 
+function applyTrustDeltaInSim(
+  tx: SimTx,
+  reqData: Record<string, any>,
+  delta: number,
+  eventType: 'COMPLETE_TX' | 'CANCEL_HOLD' | 'EXPIRED_HOLD',
+  holdRefId: string,
+  referenceId: string,
+  nowMs = Date.now()
+): void {
+  const currentScore = reqData.current_trust_score ?? 100;
+  const newBalance = Math.max(0, Math.min(200, currentScore + delta));
+  const appliedDelta = newBalance - currentScore;
+
+  const userPatch: Record<string, any> = {
+    current_trust_score: newBalance,
+    last_trust_ref_id: holdRefId,
+  };
+  if (newBalance < 50) {
+    userPatch.hold_locked_until = new Date(nowMs + 7 * 24 * 3600 * 1000);
+  }
+
+  tx.update('users', reqData.uid, userPatch);
+  tx.recordTrustLog(
+    reqData.uid,
+    {
+      score_change: appliedDelta,
+      balance_after: newBalance,
+      event_type: eventType,
+      reference_id: referenceId,
+    },
+    `${eventType}_${holdRefId}`
+  );
+}
+
 async function completeHoldInSim(store: SimStore, holdId: string, actorUid: string): Promise<void> {
   await runSimulatedTransaction(store, async (tx) => {
     const holdData = await tx.get('holds', holdId);
@@ -290,14 +325,78 @@ async function completeHoldInSim(store: SimStore, holdId: string, actorUid: stri
     });
 
     if (reqData) {
-      const nextScore = Math.min(200, (reqData.current_trust_score ?? 100) + 5);
-      tx.update('users', holdData.requester_id, { current_trust_score: nextScore });
-      tx.recordTrustLog(holdData.requester_id, {
-        score_change: 5,
-        balance_after: nextScore,
-        event_type: 'COMPLETE_TX',
-        reference_id: txId,
+      applyTrustDeltaInSim(tx, reqData, 5, 'COMPLETE_TX', holdId, txId);
+    }
+  });
+}
+
+async function cancelHoldInSim(
+  store: SimStore,
+  holdId: string,
+  actorUid: string,
+  nowMs = Date.now()
+): Promise<void> {
+  await runSimulatedTransaction(store, async (tx) => {
+    const holdData = await tx.get('holds', holdId);
+    if (!holdData || holdData.hold_status !== 'active') {
+      throw new Error('Phiên giữ chỗ này không còn hoạt động.');
+    }
+    if (actorUid !== holdData.requester_id && actorUid !== holdData.seller_id) {
+      throw new Error('Bạn không có quyền hủy phiên giữ chỗ này.');
+    }
+
+    const [itemData, reqData, meetupData] = await Promise.all([
+      tx.get('items', holdData.item_id),
+      tx.get('users', holdData.requester_id),
+      tx.get('meetups', holdId),
+    ]);
+
+    tx.update('holds', holdId, { hold_status: 'cancelled' });
+    if (itemData && itemData.active_hold_id === holdId) {
+      tx.update('items', holdData.item_id, {
+        item_status: 'available',
+        active_hold_id: null,
       });
+    }
+    if (meetupData) {
+      tx.update('meetups', holdId, { status: 'cancelled' });
+    }
+
+    if (actorUid === holdData.requester_id && reqData) {
+      applyTrustDeltaInSim(tx, reqData, -10, 'CANCEL_HOLD', holdId, holdId, nowMs);
+    }
+  });
+}
+
+async function expireHoldInSim(store: SimStore, holdId: string, nowMs = Date.now()): Promise<void> {
+  await runSimulatedTransaction(store, async (tx) => {
+    const holdData = await tx.get('holds', holdId);
+    if (!holdData || holdData.hold_status !== 'active') {
+      throw new Error('Phiên giữ chỗ này không còn hoạt động.');
+    }
+    if (holdData.hold_expires_at.getTime() > nowMs) {
+      throw new Error('Phiên giữ chỗ chưa quá hạn.');
+    }
+
+    const [itemData, reqData, meetupData] = await Promise.all([
+      tx.get('items', holdData.item_id),
+      tx.get('users', holdData.requester_id),
+      tx.get('meetups', holdId),
+    ]);
+
+    tx.update('holds', holdId, { hold_status: 'expired' });
+    if (itemData && itemData.active_hold_id === holdId) {
+      tx.update('items', holdData.item_id, {
+        item_status: 'available',
+        active_hold_id: null,
+      });
+    }
+    if (meetupData) {
+      tx.update('meetups', holdId, { status: 'cancelled' });
+    }
+
+    if (reqData) {
+      applyTrustDeltaInSim(tx, reqData, -10, 'EXPIRED_HOLD', holdId, holdId, nowMs);
     }
   });
 }
@@ -382,9 +481,98 @@ async function main() {
   assert.equal(store1.holds.get(winnerHoldId)!.data.hold_status, 'converted');
   assert.equal(store1.items.get('item_01')!.data.item_status, 'completed');
   assert.equal(store1.users.get(winnerUid)!.data.current_trust_score, 105);
+  assert.equal(store1.users.get(winnerUid)!.data.last_trust_ref_id, winnerHoldId);
   console.log('[PASS] Scenario 5: Anti-Self-Completion & Seller Finalization (+5 trust score)');
 
-  console.log('\nALL 5 SCENARIOS PASSED.');
+  // Scenario 6: Cancel Hold & Re-acquisition (CANCEL_HOLD)
+  const store6 = createInitialStore();
+  const { holdId: cancelHoldId } = await placeHoldInSim(store6, {
+    itemId: 'item_01',
+    requesterId: 'student_01',
+    holdDurationHours: 24,
+    proposedTime: validMeetup,
+    nowMs: baseNow,
+  });
+  await assert.rejects(
+    () => cancelHoldInSim(store6, cancelHoldId, 'student_02', baseNow),
+    /không có quyền hủy/
+  );
+  await cancelHoldInSim(store6, cancelHoldId, 'student_01', baseNow);
+  assert.equal(store6.holds.get(cancelHoldId)!.data.hold_status, 'cancelled');
+  assert.equal(store6.items.get('item_01')!.data.item_status, 'available');
+  assert.equal(store6.items.get('item_01')!.data.active_hold_id, null);
+  assert.equal(store6.meetups.get(cancelHoldId)!.data.status, 'cancelled');
+  assert.equal(store6.users.get('student_01')!.data.current_trust_score, 90);
+  assert.equal(store6.users.get('student_01')!.data.last_trust_ref_id, cancelHoldId);
+  const cancelLog = store6.trustHistory.find((entry) => entry.logId === `CANCEL_HOLD_${cancelHoldId}`);
+  assert.ok(cancelLog, 'Expected deterministic CANCEL_HOLD ledger entry');
+  assert.equal(cancelLog.data.score_change, -10);
+  assert.equal(cancelLog.data.balance_after, 90);
+
+  const { holdId: reacquiredHoldId } = await placeHoldInSim(store6, {
+    itemId: 'item_01',
+    requesterId: 'student_02',
+    holdDurationHours: 24,
+    proposedTime: validMeetup,
+    nowMs: baseNow,
+  });
+  assert.equal(store6.items.get('item_01')!.data.item_status, 'held');
+  assert.equal(store6.items.get('item_01')!.data.active_hold_id, reacquiredHoldId);
+  console.log('[PASS] Scenario 6: Hold Cancellation (-10 trust, deterministic ledger) & Re-acquisition');
+
+  // Scenario 7: Expired Hold Penalty + Auto-Lock (< 50) + Clamped appliedDelta + toSlugVi
+  const store7 = createInitialStore();
+  store7.users.get('student_03')!.data.current_trust_score = 55;
+  const { holdId: expiredHoldId } = await placeHoldInSim(store7, {
+    itemId: 'item_01',
+    requesterId: 'student_03',
+    holdDurationHours: 24,
+    proposedTime: validMeetup,
+    nowMs: baseNow,
+  });
+  const afterExpiryMs = baseNow + 24 * 3600 * 1000 + 60_000;
+  await expireHoldInSim(store7, expiredHoldId, afterExpiryMs);
+  assert.equal(store7.holds.get(expiredHoldId)!.data.hold_status, 'expired');
+  assert.equal(store7.items.get('item_01')!.data.item_status, 'available');
+  assert.equal(store7.items.get('item_01')!.data.active_hold_id, null);
+  assert.equal(store7.meetups.get(expiredHoldId)!.data.status, 'cancelled');
+  assert.equal(store7.users.get('student_03')!.data.current_trust_score, 45);
+  assert.equal(store7.users.get('student_03')!.data.last_trust_ref_id, expiredHoldId);
+  assert.ok(store7.users.get('student_03')!.data.hold_locked_until instanceof Date);
+  const expiredLog = store7.trustHistory.find((entry) => entry.logId === `EXPIRED_HOLD_${expiredHoldId}`);
+  assert.ok(expiredLog, 'Expected deterministic EXPIRED_HOLD ledger entry');
+  assert.equal(expiredLog.data.score_change, -10);
+  assert.equal(expiredLog.data.balance_after, 45);
+  await assert.rejects(
+    () =>
+      placeHoldInSim(store7, {
+        itemId: 'item_01',
+        requesterId: 'student_03',
+        holdDurationHours: 24,
+        proposedTime: new Date(afterExpiryMs + 12 * 3600 * 1000),
+        nowMs: afterExpiryMs,
+      }),
+    /dưới 50/
+  );
+
+  store7.users.get('student_04')!.data.current_trust_score = 198;
+  const { holdId: capHoldId } = await placeHoldInSim(store7, {
+    itemId: 'item_01',
+    requesterId: 'student_04',
+    holdDurationHours: 24,
+    proposedTime: new Date(afterExpiryMs + 12 * 3600 * 1000),
+    nowMs: afterExpiryMs,
+  });
+  await completeHoldInSim(store7, capHoldId, 'seller_01');
+  assert.equal(store7.users.get('student_04')!.data.current_trust_score, 200);
+  assert.equal(store7.users.get('student_04')!.data.last_trust_ref_id, capHoldId);
+  const capLog = store7.trustHistory.find((entry) => entry.logId === `COMPLETE_TX_${capHoldId}`);
+  assert.ok(capLog, 'Expected deterministic COMPLETE_TX ledger entry');
+  assert.equal(capLog.data.score_change, 2);
+  assert.equal(toSlugVi('Sảnh Giảng Đường Đôi Nhà B'), 'sanh-giang-duong-doi-nha-b');
+  console.log('[PASS] Scenario 7: Hold Expiry (< 50 lock), Clamped appliedDelta (+2 at 198->200), & toSlugVi');
+
+  console.log('\nALL 7 SCENARIOS PASSED.');
 }
 
 main().catch((err) => {

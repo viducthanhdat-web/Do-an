@@ -12,8 +12,8 @@ import {
   ConfirmationResult,
 } from 'firebase/auth';
 import {
-  collection,
   doc,
+  getDoc,
   onSnapshot,
   serverTimestamp,
   updateDoc,
@@ -46,6 +46,7 @@ interface AuthContextType {
   signInWithEmail: (email: string, pass: string) => Promise<void>;
   updateProfileInfo: (payload: UpdateProfilePayload) => Promise<void>;
   setupRecaptcha: (containerId: string) => void;
+  clearRecaptcha: () => void;
   signInWithPhone: (phoneNumber: string) => Promise<ConfirmationResult>;
   logout: () => Promise<void>;
 }
@@ -56,66 +57,85 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
-  const [recaptchaVerifier, setRecaptchaVerifier] = useState<RecaptchaVerifier | null>(null);
 
+  const recaptchaVerifierRef = useRef<RecaptchaVerifier | null>(null);
   const pendingSignUpRef = useRef<Omit<SignUpPayload, 'password'> | null>(null);
-  const initializingUidRef = useRef<string | null>(null);
+  const initializingPromisesRef = useRef<Map<string, Promise<void>>>(new Map());
 
-  const initializeStudentProfile = async (firebaseUser: User) => {
-    if (initializingUidRef.current === firebaseUser.uid) return;
-    initializingUidRef.current = firebaseUser.uid;
-
-    try {
-      const pending = pendingSignUpRef.current;
-      if (pending && pending.email.trim().toLowerCase() === (firebaseUser.email || '').toLowerCase()) {
-        pendingSignUpRef.current = null;
+  const clearRecaptcha = () => {
+    if (recaptchaVerifierRef.current) {
+      try {
+        recaptchaVerifierRef.current.clear();
+      } catch {
+        // Container DOM node may already have been unmounted
       }
-
-      const email = pending?.email.trim() || firebaseUser.email || '';
-      const isDefaultAdmin = email === BOOTSTRAP_ADMIN_EMAIL;
-      const autoStudentId =
-        pending?.studentIdCode.trim().toUpperCase() ||
-        email.split('@')[0]?.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 12) ||
-        `SV${firebaseUser.uid.slice(0, 6).toUpperCase()}`;
-
-      const nowServer = serverTimestamp();
-      const batch = writeBatch(db);
-      const userRef = doc(db, 'users', firebaseUser.uid);
-      const initLogRef = doc(collection(db, 'users', firebaseUser.uid, 'trust_history'));
-
-      batch.set(userRef, {
-        uid: firebaseUser.uid,
-        student_id_code: autoStudentId,
-        email,
-        full_name: pending?.fullName.trim() || firebaseUser.displayName || 'Sinh viên mới',
-        phone_number: pending?.phoneNumber.trim() || firebaseUser.phoneNumber || '',
-        avatar_url: firebaseUser.photoURL || '',
-        role: isDefaultAdmin ? 'admin' : 'student',
-        current_trust_score: 100,
-        status: 'active',
-        hold_locked_until: null,
-        created_at: nowServer,
-        updated_at: nowServer,
-      });
-
-      batch.set(initLogRef, {
-        score_change: 0,
-        balance_after: 100,
-        event_type: 'INIT',
-        reference_id: null,
-        description: 'Khởi tạo tài khoản sinh viên mới với 100 điểm tín nhiệm gốc',
-        created_at: nowServer,
-      });
-
-      await batch.commit();
-    } catch (err) {
-      console.error('Error initializing student profile:', err);
-      setLoading(false);
-    } finally {
-      if (initializingUidRef.current === firebaseUser.uid) {
-        initializingUidRef.current = null;
-      }
+      recaptchaVerifierRef.current = null;
     }
+  };
+
+  const initializeStudentProfile = (firebaseUser: User): Promise<void> => {
+    const existingPromise = initializingPromisesRef.current.get(firebaseUser.uid);
+    if (existingPromise) return existingPromise;
+
+    const initPromise = (async () => {
+      try {
+        const userRef = doc(db, 'users', firebaseUser.uid);
+        const existingSnap = await getDoc(userRef);
+        if (existingSnap.exists()) return;
+
+        const pending = pendingSignUpRef.current;
+        if (pending && pending.email.trim().toLowerCase() === (firebaseUser.email || '').toLowerCase()) {
+          pendingSignUpRef.current = null;
+        }
+
+        const email = pending?.email.trim() || firebaseUser.email || '';
+        const isDefaultAdmin =
+          email === BOOTSTRAP_ADMIN_EMAIL && firebaseUser.emailVerified === true;
+        const autoStudentId =
+          pending?.studentIdCode.trim().toUpperCase() ||
+          email.split('@')[0]?.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 12) ||
+          `SV${firebaseUser.uid.slice(0, 6).toUpperCase()}`;
+
+        const nowServer = serverTimestamp();
+        const batch = writeBatch(db);
+        const initLogRef = doc(db, 'users', firebaseUser.uid, 'trust_history', 'INIT');
+
+        batch.set(userRef, {
+          uid: firebaseUser.uid,
+          student_id_code: autoStudentId,
+          email,
+          full_name: pending?.fullName.trim() || firebaseUser.displayName || 'Sinh viên mới',
+          phone_number: pending?.phoneNumber.trim() || firebaseUser.phoneNumber || '',
+          avatar_url: firebaseUser.photoURL || '',
+          role: isDefaultAdmin ? 'admin' : 'student',
+          current_trust_score: 100,
+          status: 'active',
+          hold_locked_until: null,
+          last_trust_ref_id: null,
+          created_at: nowServer,
+          updated_at: nowServer,
+        });
+
+        batch.set(initLogRef, {
+          score_change: 0,
+          balance_after: 100,
+          event_type: 'INIT',
+          reference_id: null,
+          description: 'Khởi tạo tài khoản sinh viên mới với 100 điểm tín nhiệm gốc',
+          created_at: nowServer,
+        });
+
+        await batch.commit();
+      } catch (err) {
+        console.error('Error initializing student profile:', err);
+        setLoading(false);
+      } finally {
+        initializingPromisesRef.current.delete(firebaseUser.uid);
+      }
+    })();
+
+    initializingPromisesRef.current.set(firebaseUser.uid, initPromise);
+    return initPromise;
   };
 
   useEffect(() => {
@@ -158,14 +178,14 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     return () => {
       if (unsubProfile) unsubProfile();
       unsubscribeAuth();
+      clearRecaptcha();
     };
   }, []);
 
   const setupRecaptcha = (containerId: string) => {
-    if (!recaptchaVerifier) {
-      const verifier = new RecaptchaVerifier(auth, containerId, { size: 'invisible' });
-      setRecaptchaVerifier(verifier);
-    }
+    clearRecaptcha();
+    const verifier = new RecaptchaVerifier(auth, containerId, { size: 'invisible' });
+    recaptchaVerifierRef.current = verifier;
   };
 
   const signInWithGoogle = async () => {
@@ -200,8 +220,8 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const signInWithPhone = async (phoneNumber: string) => {
-    if (!recaptchaVerifier) throw new Error('Recaptcha not initialized');
-    return await signInWithPhoneNumber(auth, phoneNumber, recaptchaVerifier);
+    if (!recaptchaVerifierRef.current) throw new Error('Recaptcha chưa sẵn sàng. Vui lòng thử lại.');
+    return await signInWithPhoneNumber(auth, phoneNumber, recaptchaVerifierRef.current);
   };
 
   const logout = async () => {
@@ -219,6 +239,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         signInWithEmail,
         updateProfileInfo,
         setupRecaptcha,
+        clearRecaptcha,
         signInWithPhone,
         logout,
       }}

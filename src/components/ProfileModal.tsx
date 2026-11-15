@@ -6,7 +6,7 @@ import { toDateSafe, TrustHistoryEntry } from '../types/schema';
 import { X, ShieldCheck, Award, Phone, Hash, User as UserIcon, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { format } from 'date-fns';
 import { motion } from 'motion/react';
-import { cn } from '../lib/utils';
+import { cn, formatUserError, logFirestoreError, OperationType } from '../lib/utils';
 
 export const ProfileModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen, onClose }) => {
   const { profile, updateProfileInfo } = useAuth();
@@ -15,6 +15,7 @@ export const ProfileModal: React.FC<{ isOpen: boolean; onClose: () => void }> = 
   const [phoneNumber, setPhoneNumber] = useState('');
   const [saving, setSaving] = useState(false);
   const [savedMsg, setSavedMsg] = useState('');
+  const [errorMsg, setErrorMsg] = useState('');
   const [history, setHistory] = useState<TrustHistoryEntry[]>([]);
 
   useEffect(() => {
@@ -27,12 +28,18 @@ export const ProfileModal: React.FC<{ isOpen: boolean; onClose: () => void }> = 
 
   useEffect(() => {
     if (!isOpen || !profile) return;
-    const unsub = onSnapshot(collection(db, 'users', profile.uid, 'trust_history'), (snap) => {
-      const list: TrustHistoryEntry[] = [];
-      snap.forEach((d) => list.push({ id: d.id, ...(d.data() as Omit<TrustHistoryEntry, 'id'>) }));
-      list.sort((a, b) => toDateSafe(b.created_at).getTime() - toDateSafe(a.created_at).getTime());
-      setHistory(list);
-    });
+    const unsub = onSnapshot(
+      collection(db, 'users', profile.uid, 'trust_history'),
+      (snap) => {
+        const list: TrustHistoryEntry[] = [];
+        snap.forEach((d) => list.push({ id: d.id, ...(d.data() as Omit<TrustHistoryEntry, 'id'>) }));
+        list.sort((a, b) => toDateSafe(b.created_at).getTime() - toDateSafe(a.created_at).getTime());
+        setHistory(list);
+      },
+      (err) => {
+        logFirestoreError(err, OperationType.LIST, `users/${profile.uid}/trust_history`);
+      }
+    );
     return () => unsub();
   }, [isOpen, profile]);
 
@@ -42,6 +49,7 @@ export const ProfileModal: React.FC<{ isOpen: boolean; onClose: () => void }> = 
     e.preventDefault();
     setSaving(true);
     setSavedMsg('');
+    setErrorMsg('');
     try {
       await updateProfileInfo({
         full_name: fullName,
@@ -49,6 +57,9 @@ export const ProfileModal: React.FC<{ isOpen: boolean; onClose: () => void }> = 
         phone_number: phoneNumber,
       });
       setSavedMsg('Đã cập nhật hồ sơ sinh viên thành công!');
+    } catch (err: unknown) {
+      logFirestoreError(err, OperationType.UPDATE, `users/${profile.uid}`);
+      setErrorMsg(formatUserError(err, 'Không thể lưu thông tin hồ sơ. Vui lòng thử lại.'));
     } finally {
       setSaving(false);
     }
@@ -124,6 +135,7 @@ export const ProfileModal: React.FC<{ isOpen: boolean; onClose: () => void }> = 
               </label>
               <input
                 required
+                maxLength={50}
                 value={studentIdCode}
                 onChange={(e) => setStudentIdCode(e.target.value)}
                 className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-sm uppercase"
@@ -135,6 +147,7 @@ export const ProfileModal: React.FC<{ isOpen: boolean; onClose: () => void }> = 
               </label>
               <input
                 required
+                maxLength={100}
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
                 className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-sm"
@@ -146,6 +159,7 @@ export const ProfileModal: React.FC<{ isOpen: boolean; onClose: () => void }> = 
               </label>
               <input
                 required
+                maxLength={30}
                 value={phoneNumber}
                 onChange={(e) => setPhoneNumber(e.target.value)}
                 placeholder="09xx..."
@@ -154,8 +168,10 @@ export const ProfileModal: React.FC<{ isOpen: boolean; onClose: () => void }> = 
             </div>
           </div>
 
-          <div className="flex items-center justify-between">
-            {savedMsg ? (
+          <div className="flex items-center justify-between gap-3">
+            {errorMsg ? (
+              <span className="text-xs font-bold text-red-600">{errorMsg}</span>
+            ) : savedMsg ? (
               <span className="text-xs font-bold text-emerald-600 flex items-center gap-1.5">
                 <CheckCircle2 size={15} /> {savedMsg}
               </span>

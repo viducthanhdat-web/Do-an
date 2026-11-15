@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../lib/FirebaseProvider';
+import { formatUserError } from '../lib/utils';
 import { X, Mail, Phone, Lock, User as UserIcon, AlertCircle, ShieldCheck, Hash } from 'lucide-react';
 import { motion } from 'motion/react';
 
 export const LoginModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen, onClose }) => {
-  const { signInWithGoogle, signInWithEmail, signUpWithEmail, setupRecaptcha, signInWithPhone } = useAuth();
+  const { signInWithGoogle, signInWithEmail, signUpWithEmail, setupRecaptcha, clearRecaptcha, signInWithPhone } =
+    useAuth();
   const [mode, setMode] = useState<'login' | 'signup' | 'phone'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -20,8 +22,31 @@ export const LoginModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
   useEffect(() => {
     if (isOpen && mode === 'phone') {
       setupRecaptcha('recaptcha-container');
+    } else {
+      clearRecaptcha();
     }
+    return () => {
+      if (mode === 'phone') {
+        clearRecaptcha();
+      }
+    };
   }, [isOpen, mode]);
+
+  const handleClose = () => {
+    setError('');
+    setConfirmationResult(null);
+    clearRecaptcha();
+    onClose();
+  };
+
+  const switchMode = (nextMode: 'login' | 'signup' | 'phone') => {
+    setError('');
+    setConfirmationResult(null);
+    if (nextMode !== 'phone') {
+      clearRecaptcha();
+    }
+    setMode(nextMode);
+  };
 
   const handleEmailAuth = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -39,9 +64,22 @@ export const LoginModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
       } else {
         await signInWithEmail(email, password);
       }
-      onClose();
-    } catch (err: any) {
-      setError(err.message || 'Đã xảy ra lỗi xác thực.');
+      handleClose();
+    } catch (err: unknown) {
+      setError(formatUserError(err, 'Đã xảy ra lỗi xác thực.'));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGoogleSignIn = async () => {
+    setError('');
+    setLoading(true);
+    try {
+      await signInWithGoogle();
+      handleClose();
+    } catch (err: unknown) {
+      setError(formatUserError(err, 'Không thể đăng nhập bằng Google.'));
     } finally {
       setLoading(false);
     }
@@ -52,10 +90,10 @@ export const LoginModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
     setError('');
     setLoading(true);
     try {
-      const result = await signInWithPhone(phone);
+      const result = await signInWithPhone(phone.trim());
       setConfirmationResult(result);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError(formatUserError(err, 'Không thể gửi mã OTP.'));
     } finally {
       setLoading(false);
     }
@@ -63,13 +101,14 @@ export const LoginModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
 
   const handleOtpSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!confirmationResult) return;
     setError('');
     setLoading(true);
     try {
-      await confirmationResult.confirm(otp);
-      onClose();
-    } catch (err: any) {
-      setError(err.message);
+      await confirmationResult.confirm(otp.trim());
+      handleClose();
+    } catch (err: unknown) {
+      setError(formatUserError(err, 'Mã OTP không hợp lệ.'));
     } finally {
       setLoading(false);
     }
@@ -83,7 +122,7 @@ export const LoginModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        onClick={onClose}
+        onClick={handleClose}
         className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
       />
 
@@ -94,7 +133,7 @@ export const LoginModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
         className="relative bg-white w-full max-w-md rounded-[2.5rem] shadow-2xl overflow-y-auto max-h-[90vh] p-8 lg:p-10"
       >
         <button
-          onClick={onClose}
+          onClick={handleClose}
           className="absolute top-6 right-6 p-2 text-slate-400 hover:text-slate-900 transition-colors"
         >
           <X size={20} />
@@ -134,6 +173,7 @@ export const LoginModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
                     <Hash className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                     <input
                       required
+                      maxLength={50}
                       type="text"
                       placeholder="Mã số sinh viên (VD: B21DCCN001)"
                       value={studentIdCode}
@@ -145,6 +185,7 @@ export const LoginModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
                     <UserIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                     <input
                       required
+                      maxLength={100}
                       type="text"
                       placeholder="Họ và tên đầy đủ"
                       value={fullName}
@@ -156,6 +197,7 @@ export const LoginModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
                     <Phone className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                     <input
                       required
+                      maxLength={30}
                       type="tel"
                       placeholder="Số điện thoại liên hệ hẹn gặp"
                       value={phoneNumber}
@@ -169,6 +211,7 @@ export const LoginModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
                 <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                 <input
                   required
+                  maxLength={254}
                   type="email"
                   placeholder="Email sinh viên (@*.edu.vn)"
                   value={email}
@@ -263,8 +306,9 @@ export const LoginModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
           <div className="space-y-2.5">
             <button
               type="button"
-              onClick={() => signInWithGoogle().then(onClose)}
-              className="w-full bg-white border border-slate-200 text-slate-700 py-3.5 rounded-2xl font-bold hover:bg-slate-50 transition-all flex items-center justify-center gap-3"
+              disabled={loading}
+              onClick={handleGoogleSignIn}
+              className="w-full bg-white border border-slate-200 text-slate-700 py-3.5 rounded-2xl font-bold hover:bg-slate-50 transition-all flex items-center justify-center gap-3 disabled:opacity-50"
             >
               <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-5 h-5" alt="Google" />
               Tiếp tục với Google
@@ -273,7 +317,7 @@ export const LoginModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
             {mode !== 'phone' ? (
               <button
                 type="button"
-                onClick={() => setMode('phone')}
+                onClick={() => switchMode('phone')}
                 className="w-full bg-slate-50 text-slate-600 py-3 rounded-2xl font-bold hover:bg-slate-100 transition-all flex items-center justify-center gap-3 text-sm"
               >
                 <Phone size={16} />
@@ -282,7 +326,7 @@ export const LoginModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
             ) : (
               <button
                 type="button"
-                onClick={() => setMode('login')}
+                onClick={() => switchMode('login')}
                 className="w-full bg-slate-50 text-slate-600 py-3 rounded-2xl font-bold hover:bg-slate-100 transition-all flex items-center justify-center gap-3 text-sm"
               >
                 <Mail size={16} />
@@ -297,7 +341,7 @@ export const LoginModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
             {mode === 'login' ? 'Chưa có tài khoản?' : 'Đã có tài khoản?'}
             <button
               type="button"
-              onClick={() => setMode(mode === 'login' ? 'signup' : 'login')}
+              onClick={() => switchMode(mode === 'login' ? 'signup' : 'login')}
               className="ml-2 text-slate-900 font-bold hover:underline"
             >
               {mode === 'login' ? 'Đăng ký ngay' : 'Đăng nhập'}

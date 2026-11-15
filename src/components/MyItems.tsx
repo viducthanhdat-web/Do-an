@@ -1,15 +1,17 @@
 import React, { useEffect, useState } from 'react';
-import { collection, query, where, onSnapshot, doc, deleteDoc } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, doc, deleteDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { handleFirestoreError, OperationType, cn } from '../lib/utils';
+import { formatUserError, logFirestoreError, OperationType, cn } from '../lib/utils';
 import { useAuth } from '../lib/FirebaseProvider';
 import { CATEGORY_LABELS, ItemDoc, normalizeItemDoc, toDateSafe } from '../types/schema';
-import { Package, Trash2, AlertCircle } from 'lucide-react';
+import { Package, Trash2, AlertCircle, Edit3, Eye, EyeOff } from 'lucide-react';
 import { motion } from 'motion/react';
 
-export const MyItems: React.FC = () => {
+export const MyItems: React.FC<{ onEditItem?: (item: ItemDoc) => void }> = ({ onEditItem }) => {
   const [items, setItems] = useState<ItemDoc[]>([]);
   const [loading, setLoading] = useState(true);
+  const [errorMsg, setErrorMsg] = useState('');
+  const [busyId, setBusyId] = useState<string | null>(null);
   const { user } = useAuth();
 
   useEffect(() => {
@@ -29,24 +31,49 @@ export const MyItems: React.FC = () => {
         });
         itemsList.sort((a, b) => toDateSafe(b.created_at).getTime() - toDateSafe(a.created_at).getTime());
         setItems(itemsList);
+        setErrorMsg('');
         setLoading(false);
       },
       (error) => {
+        logFirestoreError(error, OperationType.LIST, 'items');
+        setErrorMsg(formatUserError(error, 'Không thể tải danh sách vật phẩm của bạn.'));
         setLoading(false);
-        handleFirestoreError(error, OperationType.LIST, 'items');
       }
     );
 
     return () => unsubscribe();
   }, [user]);
 
+  const handleToggleVisibility = async (item: ItemDoc) => {
+    if (item.item_status !== 'available' && item.item_status !== 'hidden') return;
+    setErrorMsg('');
+    setBusyId(item.id);
+    try {
+      const nextStatus = item.item_status === 'hidden' ? 'available' : 'hidden';
+      await updateDoc(doc(db, 'items', item.id), {
+        item_status: nextStatus,
+        updated_at: serverTimestamp(),
+      });
+    } catch (error) {
+      logFirestoreError(error, OperationType.UPDATE, `items/${item.id}`);
+      setErrorMsg(formatUserError(error, 'Không thể cập nhật trạng thái hiển thị.'));
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   const handleDelete = async (item: ItemDoc) => {
     if (item.item_status === 'held') return;
     if (!window.confirm('Bạn có chắc chắn muốn xóa tin đăng này?')) return;
+    setErrorMsg('');
+    setBusyId(item.id);
     try {
       await deleteDoc(doc(db, 'items', item.id));
     } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, `items/${item.id}`);
+      logFirestoreError(error, OperationType.DELETE, `items/${item.id}`);
+      setErrorMsg(formatUserError(error, 'Không thể xóa bài đăng. Vui lòng thử lại.'));
+    } finally {
+      setBusyId(null);
     }
   };
 
@@ -76,6 +103,13 @@ export const MyItems: React.FC = () => {
           Tổng bài đăng: {items.length}
         </div>
       </div>
+
+      {errorMsg && (
+        <div className="p-4 bg-red-50 border border-red-200 rounded-2xl flex items-start gap-2.5 text-red-700 text-sm font-semibold">
+          <AlertCircle size={18} className="shrink-0 mt-0.5" />
+          <span>{errorMsg}</span>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-4">
         {items.length > 0 ? (
@@ -164,8 +198,37 @@ export const MyItems: React.FC = () => {
               </div>
 
               <div className="flex items-center gap-2 shrink-0">
+                {item.moderation_status === 'approved' &&
+                  (item.item_status === 'available' || item.item_status === 'hidden') && (
+                    <button
+                      disabled={busyId === item.id}
+                      title={item.item_status === 'hidden' ? 'Hiển thị lại trên sàn' : 'Ẩn tạm thời khỏi sàn'}
+                      onClick={() => handleToggleVisibility(item)}
+                      className="p-3 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-2xl transition-all disabled:opacity-30"
+                    >
+                      {item.item_status === 'hidden' ? <Eye size={19} /> : <EyeOff size={19} />}
+                    </button>
+                  )}
+                {onEditItem && (
+                  <button
+                    disabled={
+                      busyId === item.id ||
+                      item.item_status === 'held' ||
+                      item.item_status === 'completed'
+                    }
+                    title={
+                      item.item_status === 'held' || item.item_status === 'completed'
+                        ? 'Không thể sửa khi đang giữ chỗ hoặc đã trao đổi xong'
+                        : 'Chỉnh sửa bài đăng'
+                    }
+                    onClick={() => onEditItem(item)}
+                    className="p-3 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-2xl transition-all disabled:opacity-25 disabled:cursor-not-allowed"
+                  >
+                    <Edit3 size={19} />
+                  </button>
+                )}
                 <button
-                  disabled={item.item_status === 'held'}
+                  disabled={busyId === item.id || item.item_status === 'held'}
                   title={
                     item.item_status === 'held'
                       ? 'Không thể xóa khi đang có sinh viên giữ chỗ hẹn nhận (BR-01)'

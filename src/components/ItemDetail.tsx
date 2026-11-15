@@ -1,14 +1,16 @@
 import React, { useEffect, useState } from 'react';
-import { collection, getDocs } from 'firebase/firestore';
+import { collection, doc, getDocs, onSnapshot } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from '../lib/FirebaseProvider';
 import { createHoldWithTransaction, validateHoldWindow } from '../lib/exchangeService';
+import { formatUserError, logFirestoreError, OperationType } from '../lib/utils';
 import {
   CATEGORY_LABELS,
   CONDITION_LABELS,
   DEFAULT_MEETUP_LOCATIONS,
   ItemDoc,
   MeetupLocationDoc,
+  normalizeItemDoc,
 } from '../types/schema';
 import {
   X,
@@ -45,6 +47,9 @@ export const ItemDetail: React.FC<{
   onViewMyHolds?: () => void;
 }> = ({ item, onClose, onViewMyHolds }) => {
   const { user, profile } = useAuth();
+  const [liveItem, setLiveItem] = useState<ItemDoc>(item);
+  const [itemUnavailableMsg, setItemUnavailableMsg] = useState('');
+  const [activeImageIdx, setActiveImageIdx] = useState(0);
   const [locations, setLocations] = useState<MeetupLocationDoc[]>(DEFAULT_MEETUP_LOCATIONS);
   const [selectedLocId, setSelectedLocId] = useState(DEFAULT_MEETUP_LOCATIONS[0].id);
   const [holdHours, setHoldHours] = useState<24 | 48>(48);
@@ -53,6 +58,27 @@ export const ItemDetail: React.FC<{
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [holdResult, setHoldResult] = useState<{ expiresAt: Date; locationName: string } | null>(null);
+
+  useEffect(() => {
+    setLiveItem(item);
+    setItemUnavailableMsg('');
+    setActiveImageIdx(0);
+    const unsubItem = onSnapshot(
+      doc(db, 'items', item.id),
+      (snap) => {
+        if (snap.exists()) {
+          setLiveItem(normalizeItemDoc(snap.id, snap.data()));
+          setItemUnavailableMsg('');
+        } else {
+          setItemUnavailableMsg('Vật phẩm này đã bị gỡ hoặc không còn tồn tại trên hệ thống.');
+        }
+      },
+      (err) => {
+        logFirestoreError(err, OperationType.GET, `items/${item.id}`);
+      }
+    );
+    return () => unsubItem();
+  }, [item]);
 
   useEffect(() => {
     getDocs(collection(db, 'meetup_locations'))
@@ -72,16 +98,27 @@ export const ItemDetail: React.FC<{
       .catch(() => {});
   }, []);
 
-  const isSeller = user?.uid === item.seller_id;
+  const isSeller = user?.uid === liveItem.seller_id;
   const trustScore = profile?.current_trust_score ?? 100;
   const isTrustLocked = !!profile && trustScore < 50;
+  const isAvailableForHold =
+    !itemUnavailableMsg &&
+    liveItem.item_status === 'available' &&
+    liveItem.moderation_status === 'approved';
+  const galleryImages =
+    liveItem.image_urls.length > 0
+      ? liveItem.image_urls
+      : liveItem.primary_image
+      ? [liveItem.primary_image]
+      : [];
+  const displayedImage = galleryImages[activeImageIdx] || liveItem.primary_image;
   const nowMs = Date.now();
   const minTimeStr = formatDatetimeLocal(new Date(nowMs + 5 * 60 * 1000));
   const maxTimeStr = formatDatetimeLocal(new Date(nowMs + holdHours * 3600 * 1000));
 
   const handleHold = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user || !profile) return;
+    if (!user || !profile || !isAvailableForHold) return;
 
     setErrorMsg('');
     setLoading(true);
@@ -91,7 +128,7 @@ export const ItemDetail: React.FC<{
       validateHoldWindow(holdHours, proposedDate);
 
       const res = await createHoldWithTransaction({
-        itemId: item.id,
+        itemId: liveItem.id,
         requester: profile,
         holdDurationHours: holdHours,
         locationId: selectedLoc.id,
@@ -104,8 +141,8 @@ export const ItemDetail: React.FC<{
         expiresAt: res.expiresAt,
         locationName: selectedLoc.location_name,
       });
-    } catch (err: any) {
-      setErrorMsg(err?.message || 'Không thể đặt giữ chỗ. Vui lòng thử lại.');
+    } catch (err: unknown) {
+      setErrorMsg(formatUserError(err, 'Không thể đặt giữ chỗ. Vui lòng thử lại.'));
     } finally {
       setLoading(false);
     }
@@ -135,22 +172,40 @@ export const ItemDetail: React.FC<{
         </button>
 
         {/* Left Image Column */}
-        <div className="w-full lg:w-5/12 h-56 lg:h-auto bg-slate-100 relative shrink-0">
-          {item.primary_image ? (
-            <img src={item.primary_image} alt={item.title} className="w-full h-full object-cover" />
-          ) : (
-            <div className="w-full h-full flex flex-col items-center justify-center text-slate-300 gap-3">
-              {item.category_id === 'giao-trinh' ? <BookOpen size={72} /> : <Cpu size={72} />}
-              <span className="text-xs font-bold uppercase tracking-widest">
-                {CATEGORY_LABELS[item.category_id]}
+        <div className="w-full lg:w-5/12 h-56 lg:h-auto bg-slate-100 relative shrink-0 flex flex-col">
+          <div className="flex-1 relative overflow-hidden">
+            {displayedImage ? (
+              <img src={displayedImage} alt={liveItem.title} className="w-full h-full object-cover" />
+            ) : (
+              <div className="w-full h-full flex flex-col items-center justify-center text-slate-300 gap-3">
+                {liveItem.category_id === 'giao-trinh' ? <BookOpen size={72} /> : <Cpu size={72} />}
+                <span className="text-xs font-bold uppercase tracking-widest">
+                  {CATEGORY_LABELS[liveItem.category_id]}
+                </span>
+              </div>
+            )}
+            <div className="absolute top-6 left-6">
+              <span className="px-3.5 py-1.5 bg-slate-900 text-white rounded-xl text-xs font-bold shadow-lg">
+                {liveItem.subject_name || liveItem.subject_id || CATEGORY_LABELS[liveItem.category_id]}
               </span>
             </div>
-          )}
-          <div className="absolute top-6 left-6">
-            <span className="px-3.5 py-1.5 bg-slate-900 text-white rounded-xl text-xs font-bold shadow-lg">
-              {item.subject_name || item.subject_id || CATEGORY_LABELS[item.category_id]}
-            </span>
           </div>
+          {galleryImages.length > 1 && (
+            <div className="p-2.5 bg-white/90 border-t border-slate-100 flex gap-2 overflow-x-auto">
+              {galleryImages.map((imgUrl, idx) => (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => setActiveImageIdx(idx)}
+                  className={`w-14 h-14 rounded-xl overflow-hidden border-2 shrink-0 ${
+                    idx === activeImageIdx ? 'border-slate-900' : 'border-transparent opacity-60 hover:opacity-100'
+                  }`}
+                >
+                  <img src={imgUrl} alt={`${liveItem.title} ${idx + 1}`} className="w-full h-full object-cover" />
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Right Details & Hold Form */}
@@ -161,26 +216,26 @@ export const ItemDetail: React.FC<{
                 <div>
                   <div className="flex items-center gap-2 text-slate-500 font-bold text-xs uppercase tracking-wider mb-2">
                     <ShieldCheck size={15} className="text-emerald-600" />
-                    Đã kiểm duyệt · {CONDITION_LABELS[item.condition_level]}
+                    Đã kiểm duyệt · {CONDITION_LABELS[liveItem.condition_level]}
                   </div>
-                  <h2 className="text-2xl lg:text-3xl font-bold text-slate-900 mb-3">{item.title}</h2>
-                  <div className="flex items-center gap-3">
+                  <h2 className="text-2xl lg:text-3xl font-bold text-slate-900 mb-3">{liveItem.title}</h2>
+                  <div className="flex items-center gap-3 flex-wrap">
                     <span
                       className={`text-2xl font-black ${
-                        item.price === 0 ? 'text-emerald-600' : 'text-slate-900'
+                        liveItem.price === 0 ? 'text-emerald-600' : 'text-slate-900'
                       }`}
                     >
-                      {item.price === 0 ? 'Tặng miễn phí (0đ)' : `${item.price.toLocaleString('vi-VN')}đ`}
+                      {liveItem.price === 0 ? 'Tặng miễn phí (0đ)' : `${liveItem.price.toLocaleString('vi-VN')}đ`}
                     </span>
                     <span className="text-xs font-bold text-slate-500 bg-slate-100 px-2.5 py-1 rounded-lg">
-                      Người đăng: {item.seller_summary.full_name} (Uy tín {item.seller_summary.trust_score}đ)
+                      Người đăng: {liveItem.seller_summary.full_name} (Uy tín {liveItem.seller_summary.trust_score}đ)
                     </span>
                   </div>
                 </div>
 
                 <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
                   <h4 className="text-xs font-black uppercase tracking-wider text-slate-400 mb-1">Mô tả tình trạng</h4>
-                  <p className="text-sm text-slate-700 font-medium leading-relaxed">{item.description}</p>
+                  <p className="text-sm text-slate-700 font-medium leading-relaxed">{liveItem.description}</p>
                 </div>
 
                 {errorMsg && (
@@ -194,6 +249,20 @@ export const ItemDetail: React.FC<{
                   <div className="p-4 bg-red-50 border border-red-200 rounded-2xl text-red-700 text-sm font-semibold">
                     Điểm tín nhiệm hiện tại của bạn là <strong>{trustScore}đ (&lt; 50đ)</strong>. Quyền đặt giữ chỗ đang
                     tạm khóa theo quy định FR-07.
+                  </div>
+                )}
+
+                {!isSeller && !isAvailableForHold && (
+                  <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl text-amber-900 text-sm font-semibold flex items-start gap-2.5">
+                    <AlertCircle size={18} className="shrink-0 mt-0.5 text-amber-600" />
+                    <span>
+                      {itemUnavailableMsg ||
+                        (liveItem.item_status === 'held'
+                          ? 'Món đồ này vừa được một sinh viên khác giữ chỗ (FR-04.4).'
+                          : liveItem.item_status === 'completed'
+                          ? 'Vật phẩm này đã được trao đổi hoàn tất.'
+                          : 'Vật phẩm hiện không còn mở giữ chỗ trên sàn.')}
+                    </span>
                   </div>
                 )}
 
@@ -273,7 +342,7 @@ export const ItemDetail: React.FC<{
                     </div>
 
                     <button
-                      disabled={loading || !user || isTrustLocked}
+                      disabled={loading || !user || isTrustLocked || !isAvailableForHold}
                       type="submit"
                       className="w-full bg-slate-900 text-white py-4 rounded-2xl font-bold text-base hover:bg-slate-800 transition-all shadow-lg flex items-center justify-center gap-2 disabled:opacity-50"
                     >
@@ -281,6 +350,8 @@ export const ItemDetail: React.FC<{
                         <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                       ) : !user ? (
                         'Vui lòng đăng nhập ở thanh bên trái để giữ chỗ'
+                      ) : !isAvailableForHold ? (
+                        'Vật phẩm không còn sẵn sàng để giữ chỗ'
                       ) : (
                         `Đặt giữ chỗ độc quyền (${holdHours}h)`
                       )}

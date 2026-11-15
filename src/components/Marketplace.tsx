@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { handleFirestoreError, OperationType, cn } from '../lib/utils';
+import { cn, formatUserError, logFirestoreError, OperationType } from '../lib/utils';
 import {
   CATEGORY_LABELS,
   CONDITION_LABELS,
@@ -28,6 +28,7 @@ import { motion } from 'motion/react';
 export const Marketplace: React.FC<{ onSelectItem: (item: ItemDoc) => void }> = ({ onSelectItem }) => {
   const [items, setItems] = useState<ItemDoc[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [priceFilter, setPriceFilter] = useState<'all' | 'gift' | 'sell'>('all');
@@ -49,11 +50,13 @@ export const Marketplace: React.FC<{ onSelectItem: (item: ItemDoc) => void }> = 
         });
         itemsList.sort((a, b) => toDateSafe(b.created_at).getTime() - toDateSafe(a.created_at).getTime());
         setItems(itemsList);
+        setLoadError('');
         setLoading(false);
       },
       (error) => {
+        logFirestoreError(error, OperationType.LIST, 'items');
+        setLoadError(formatUserError(error, 'Không thể tải danh sách vật phẩm trên sàn.'));
         setLoading(false);
-        handleFirestoreError(error, OperationType.LIST, 'items');
       }
     );
 
@@ -98,6 +101,11 @@ export const Marketplace: React.FC<{ onSelectItem: (item: ItemDoc) => void }> = 
 
   return (
     <div className="space-y-6">
+      {loadError && (
+        <div className="p-4 bg-red-50 border border-red-200 rounded-2xl text-red-700 text-sm font-semibold">
+          {loadError}
+        </div>
+      )}
       {/* Row 1: Search & Category Tabs */}
       <div className="flex flex-col lg:flex-row gap-4 items-stretch lg:items-center justify-between">
         <div className="relative w-full lg:w-96">

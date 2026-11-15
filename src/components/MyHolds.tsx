@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { collection, getDocs, onSnapshot, query, where } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { cn } from '../lib/utils';
+import { cn, formatUserError, logFirestoreError, OperationType } from '../lib/utils';
 import { useAuth } from '../lib/FirebaseProvider';
 import {
   cancelHoldWithTransaction,
@@ -31,6 +31,8 @@ import {
   XCircle,
   Edit3,
   Check,
+  AlertCircle,
+  X,
 } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 import { vi } from 'date-fns/locale';
@@ -61,6 +63,7 @@ export const MyHolds: React.FC = () => {
   const [locations, setLocations] = useState<MeetupLocationDoc[]>(DEFAULT_MEETUP_LOCATIONS);
   const [loading, setLoading] = useState(true);
   const [processingId, setProcessingId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState('');
   const [paymentMethods, setPaymentMethods] = useState<Record<string, 'free' | 'cash' | 'bank_transfer'>>({});
 
   // Inline reschedule editor state
@@ -95,19 +98,35 @@ export const MyHolds: React.FC = () => {
     const qRequester = query(collection(db, 'holds'), where('requester_id', '==', user.uid));
     const qSeller = query(collection(db, 'holds'), where('seller_id', '==', user.uid));
 
-    const unsub1 = onSnapshot(qRequester, (snap) => {
-      const list: HoldDoc[] = [];
-      snap.forEach((d) => list.push(normalizeHoldDoc(d.id, d.data())));
-      setReqHolds(list);
-      setLoading(false);
-    });
+    const unsub1 = onSnapshot(
+      qRequester,
+      (snap) => {
+        const list: HoldDoc[] = [];
+        snap.forEach((d) => list.push(normalizeHoldDoc(d.id, d.data())));
+        setReqHolds(list);
+        setLoading(false);
+      },
+      (err) => {
+        logFirestoreError(err, OperationType.LIST, 'holds');
+        setActionError(formatUserError(err, 'Không thể tải danh sách lịch giữ chỗ.'));
+        setLoading(false);
+      }
+    );
 
-    const unsub2 = onSnapshot(qSeller, (snap) => {
-      const list: HoldDoc[] = [];
-      snap.forEach((d) => list.push(normalizeHoldDoc(d.id, d.data())));
-      setSellerHolds(list);
-      setLoading(false);
-    });
+    const unsub2 = onSnapshot(
+      qSeller,
+      (snap) => {
+        const list: HoldDoc[] = [];
+        snap.forEach((d) => list.push(normalizeHoldDoc(d.id, d.data())));
+        setSellerHolds(list);
+        setLoading(false);
+      },
+      (err) => {
+        logFirestoreError(err, OperationType.LIST, 'holds');
+        setActionError(formatUserError(err, 'Không thể tải danh sách lịch hẹn giao đồ.'));
+        setLoading(false);
+      }
+    );
 
     return () => {
       unsub1();
@@ -144,11 +163,12 @@ export const MyHolds: React.FC = () => {
 
   const handleConfirmMeetup = async (hold: HoldDoc) => {
     if (!user) return;
+    setActionError('');
     setProcessingId(hold.id);
     try {
       await confirmHoldMeetupWithTransaction(hold, user.uid);
-    } catch (err: any) {
-      alert(err?.message || 'Không thể chốt lịch hẹn.');
+    } catch (err: unknown) {
+      setActionError(formatUserError(err, 'Không thể chốt lịch hẹn.'));
     } finally {
       setProcessingId(null);
     }
@@ -160,6 +180,7 @@ export const MyHolds: React.FC = () => {
     const selectedLoc = locations.find((l) => l.id === editLocId) || locations[0];
     const proposedDate = new Date(editTimeStr);
 
+    setActionError('');
     setProcessingId(hold.id);
     try {
       await rescheduleHoldMeetupWithTransaction({
@@ -171,8 +192,8 @@ export const MyHolds: React.FC = () => {
         note: editNote,
       });
       setEditingHoldId(null);
-    } catch (err: any) {
-      alert(err?.message || 'Không thể cập nhật lịch hẹn.');
+    } catch (err: unknown) {
+      setActionError(formatUserError(err, 'Không thể cập nhật lịch hẹn.'));
     } finally {
       setProcessingId(null);
     }
@@ -180,11 +201,12 @@ export const MyHolds: React.FC = () => {
 
   const handleBuyerConfirm = async (hold: HoldDoc) => {
     if (!user) return;
+    setActionError('');
     setProcessingId(hold.id);
     try {
       await confirmBuyerReceivedWithTransaction(hold, user.uid);
-    } catch (err: any) {
-      alert(err?.message || 'Không thể ghi nhận xác nhận đã nhận đồ.');
+    } catch (err: unknown) {
+      setActionError(formatUserError(err, 'Không thể ghi nhận xác nhận đã nhận đồ.'));
     } finally {
       setProcessingId(null);
     }
@@ -192,12 +214,14 @@ export const MyHolds: React.FC = () => {
 
   const handleComplete = async (hold: HoldDoc) => {
     if (!user) return;
-    const method = paymentMethods[hold.id] || 'free';
+    const defaultMethod = hold.item_price && hold.item_price > 0 ? 'cash' : 'free';
+    const method = paymentMethods[hold.id] || defaultMethod;
+    setActionError('');
     setProcessingId(hold.id);
     try {
       await completeHoldWithTransaction(hold, user.uid, method);
-    } catch (err: any) {
-      alert(err?.message || 'Không thể xác nhận giao dịch.');
+    } catch (err: unknown) {
+      setActionError(formatUserError(err, 'Không thể xác nhận giao dịch.'));
     } finally {
       setProcessingId(null);
     }
@@ -211,6 +235,7 @@ export const MyHolds: React.FC = () => {
       : 'Bạn muốn hủy lịch hẹn này và mở khóa lại vật phẩm lên sàn?';
     if (!window.confirm(confirmMsg)) return;
 
+    setActionError('');
     setProcessingId(hold.id);
     try {
       await cancelHoldWithTransaction(
@@ -218,8 +243,8 @@ export const MyHolds: React.FC = () => {
         user.uid,
         isRequester ? 'Người nhận chủ động hủy hẹn' : 'Người đăng hủy lịch hẹn'
       );
-    } catch (err: any) {
-      alert(err?.message || 'Không thể hủy lịch hẹn.');
+    } catch (err: unknown) {
+      setActionError(formatUserError(err, 'Không thể hủy lịch hẹn.'));
     } finally {
       setProcessingId(null);
     }
@@ -245,6 +270,23 @@ export const MyHolds: React.FC = () => {
 
   return (
     <div className="space-y-10">
+      {actionError && (
+        <div className="p-4 bg-red-50 border border-red-200 rounded-2xl flex items-start justify-between gap-3 text-red-700 text-sm font-semibold">
+          <div className="flex items-start gap-2.5">
+            <AlertCircle size={18} className="shrink-0 mt-0.5" />
+            <span>{actionError}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setActionError('')}
+            className="text-red-500 hover:text-red-800"
+            aria-label="Đóng thông báo lỗi"
+          >
+            <X size={16} />
+          </button>
+        </div>
+      )}
+
       <section>
         <h2 className="text-2xl font-black text-slate-900 mb-6 flex items-center gap-3">
           <Clock className="text-blue-600" />
@@ -392,22 +434,50 @@ export const MyHolds: React.FC = () => {
                             </button>
                           )
                         ) : (
-                          <div className="flex items-center gap-2">
-                            <select
-                              value={paymentMethods[hold.id] || 'free'}
-                              onChange={(e) =>
-                                setPaymentMethods((prev) => ({
-                                  ...prev,
-                                  [hold.id]: e.target.value as 'free' | 'cash' | 'bank_transfer',
-                                }))
-                              }
-                              aria-label="Phương thức giao nhận"
-                              className="px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none"
-                            >
-                              <option value="free">Tặng 0đ</option>
-                              <option value="cash">Tiền mặt</option>
-                              <option value="bank_transfer">Chuyển khoản</option>
-                            </select>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            {typeof hold.item_price === 'number' ? (
+                              hold.item_price === 0 ? (
+                                <span className="px-3 py-2.5 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-xl text-xs font-extrabold">
+                                  Tặng miễn phí (0đ)
+                                </span>
+                              ) : (
+                                <>
+                                  <span className="px-3 py-2.5 bg-slate-100 text-slate-900 rounded-xl text-xs font-extrabold">
+                                    {hold.item_price.toLocaleString('vi-VN')}đ
+                                  </span>
+                                  <select
+                                    value={paymentMethods[hold.id] || 'cash'}
+                                    onChange={(e) =>
+                                      setPaymentMethods((prev) => ({
+                                        ...prev,
+                                        [hold.id]: e.target.value as 'cash' | 'bank_transfer',
+                                      }))
+                                    }
+                                    aria-label="Phương thức thanh toán"
+                                    className="px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none"
+                                  >
+                                    <option value="cash">Tiền mặt</option>
+                                    <option value="bank_transfer">Chuyển khoản</option>
+                                  </select>
+                                </>
+                              )
+                            ) : (
+                              <select
+                                value={paymentMethods[hold.id] || 'free'}
+                                onChange={(e) =>
+                                  setPaymentMethods((prev) => ({
+                                    ...prev,
+                                    [hold.id]: e.target.value as 'free' | 'cash' | 'bank_transfer',
+                                  }))
+                                }
+                                aria-label="Phương thức giao nhận"
+                                className="px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none"
+                              >
+                                <option value="free">Tặng 0đ</option>
+                                <option value="cash">Tiền mặt</option>
+                                <option value="bank_transfer">Chuyển khoản</option>
+                              </select>
+                            )}
                             <button
                               disabled={processingId === hold.id}
                               onClick={() => handleComplete(hold)}

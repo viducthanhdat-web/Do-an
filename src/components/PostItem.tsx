@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from 'react';
-import { addDoc, collection, getDocs, serverTimestamp } from 'firebase/firestore';
+import { addDoc, collection, doc, getDocs, serverTimestamp, updateDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../lib/firebase';
 import { useAuth } from '../lib/FirebaseProvider';
-import { handleFirestoreError, OperationType } from '../lib/utils';
+import { formatUserError, logFirestoreError, OperationType } from '../lib/utils';
 import {
   ConditionLevel,
   DEFAULT_SUBJECTS,
+  ItemDoc,
   ItemType,
   SubjectDoc,
 } from '../types/schema';
@@ -23,17 +24,22 @@ import {
   Gift,
   Coins,
   CheckCircle2,
+  AlertCircle,
 } from 'lucide-react';
 
-export const PostItem: React.FC<{ onCancel: () => void; onSuccess: () => void }> = ({
-  onCancel,
-  onSuccess,
-}) => {
+const MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024;
+
+export const PostItem: React.FC<{
+  onCancel: () => void;
+  onSuccess: () => void;
+  editingItem?: ItemDoc | null;
+}> = ({ onCancel, onSuccess, editingItem }) => {
   const { user, profile } = useAuth();
   const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
   const [subjects, setSubjects] = useState<SubjectDoc[]>(DEFAULT_SUBJECTS);
   const [imageFile, setImageFile] = useState<File | null>(null);
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(editingItem?.primary_image || null);
 
   const [formData, setFormData] = useState<{
     title: string;
@@ -45,15 +51,31 @@ export const PostItem: React.FC<{ onCancel: () => void; onSuccess: () => void }>
     item_type: ItemType;
     price: number;
   }>({
-    title: '',
-    description: '',
-    category_id: 'giao-trinh',
-    subject_id: 'BAS1201',
-    custom_subject: '',
-    condition_level: 'used_good',
-    item_type: 'gift',
-    price: 0,
+    title: editingItem?.title || '',
+    description: editingItem?.description || '',
+    category_id: editingItem?.category_id || 'giao-trinh',
+    subject_id: editingItem ? editingItem.subject_id || 'OTHER' : 'BAS1201',
+    custom_subject: editingItem && !editingItem.subject_id ? editingItem.subject_name || '' : '',
+    condition_level: editingItem?.condition_level || 'used_good',
+    item_type: editingItem?.item_type || 'gift',
+    price: editingItem?.price ?? 0,
   });
+
+  useEffect(() => {
+    setErrorMsg('');
+    setImageFile(null);
+    setImagePreview(editingItem?.primary_image || null);
+    setFormData({
+      title: editingItem?.title || '',
+      description: editingItem?.description || '',
+      category_id: editingItem?.category_id || 'giao-trinh',
+      subject_id: editingItem ? editingItem.subject_id || 'OTHER' : 'BAS1201',
+      custom_subject: editingItem && !editingItem.subject_id ? editingItem.subject_name || '' : '',
+      condition_level: editingItem?.condition_level || 'used_good',
+      item_type: editingItem?.item_type || 'gift',
+      price: editingItem?.price ?? 0,
+    });
+  }, [editingItem]);
 
   useEffect(() => {
     getDocs(collection(db, 'subjects'))
@@ -70,9 +92,22 @@ export const PostItem: React.FC<{ onCancel: () => void; onSuccess: () => void }>
       .catch(() => {});
   }, []);
 
+  const isSuspended = Boolean(profile && profile.status !== 'active');
+
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setErrorMsg('');
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
+      if (!file.type.startsWith('image/')) {
+        setErrorMsg('Vui lòng chỉ chọn tệp hình ảnh (PNG, JPG, JPEG, WEBP).');
+        e.target.value = '';
+        return;
+      }
+      if (file.size >= MAX_IMAGE_SIZE_BYTES) {
+        setErrorMsg('Kích thước ảnh không được vượt quá 5MB.');
+        e.target.value = '';
+        return;
+      }
       setImageFile(file);
       const reader = new FileReader();
       reader.onloadend = () => {
@@ -85,17 +120,35 @@ export const PostItem: React.FC<{ onCancel: () => void; onSuccess: () => void }>
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user || !profile) return;
+    if (profile.status !== 'active') {
+      setErrorMsg('Tài khoản của bạn đang bị tạm khóa quyền đăng tin (FR-02).');
+      return;
+    }
+    if (editingItem && (editingItem.item_status === 'held' || editingItem.item_status === 'completed')) {
+      setErrorMsg('Không thể chỉnh sửa vật phẩm đang được giữ chỗ hoặc đã trao đổi xong.');
+      return;
+    }
 
+    setErrorMsg('');
     setLoading(true);
     try {
-      let uploadedUrl = '';
+      let nextImageUrls = editingItem?.image_urls || [];
+      let nextPrimaryImage = editingItem?.primary_image || '';
+
       if (imageFile) {
         const storageRef = ref(storage, `items/${user.uid}_${Date.now()}_${imageFile.name}`);
         const snapshot = await uploadBytes(storageRef, imageFile);
-        uploadedUrl = await getDownloadURL(snapshot.ref);
+        const uploadedUrl = await getDownloadURL(snapshot.ref);
+        nextImageUrls = [uploadedUrl];
+        nextPrimaryImage = uploadedUrl;
+      } else if (!imagePreview) {
+        nextImageUrls = [];
+        nextPrimaryImage = '';
       }
 
-      const selectedSub = subjects.find((s) => s.subject_code === formData.subject_id || s.id === formData.subject_id);
+      const selectedSub = subjects.find(
+        (s) => s.subject_code === formData.subject_id || s.id === formData.subject_id
+      );
       const subjectIdValue = formData.subject_id === 'OTHER' ? null : formData.subject_id;
       const subjectDisplay =
         formData.subject_id === 'OTHER'
@@ -108,8 +161,7 @@ export const PostItem: React.FC<{ onCancel: () => void; onSuccess: () => void }>
       const isAdmin = profile.role === 'admin';
       const nowServer = serverTimestamp();
 
-      await addDoc(collection(db, 'items'), {
-        seller_id: user.uid,
+      const itemPayload = {
         seller_summary: {
           full_name: profile.full_name || 'Sinh viên',
           trust_score: profile.current_trust_score ?? 100,
@@ -123,19 +175,33 @@ export const PostItem: React.FC<{ onCancel: () => void; onSuccess: () => void }>
         item_type: formData.item_type,
         price: finalPrice,
         condition_level: formData.condition_level,
-        image_urls: uploadedUrl ? [uploadedUrl] : [],
-        primary_image: uploadedUrl,
-        item_status: 'available',
-        active_hold_id: null,
-        moderation_status: isAdmin ? 'approved' : 'pending',
+        image_urls: nextImageUrls,
+        primary_image: nextPrimaryImage,
+        item_status: 'available' as const,
+        moderation_status: (isAdmin ? 'approved' : 'pending') as 'approved' | 'pending',
         reject_reason: null,
-        created_at: nowServer,
         updated_at: nowServer,
-      });
+      };
+
+      if (editingItem) {
+        await updateDoc(doc(db, 'items', editingItem.id), itemPayload);
+      } else {
+        await addDoc(collection(db, 'items'), {
+          ...itemPayload,
+          seller_id: user.uid,
+          active_hold_id: null,
+          created_at: nowServer,
+        });
+      }
 
       onSuccess();
     } catch (error) {
-      handleFirestoreError(error, OperationType.CREATE, 'items');
+      logFirestoreError(
+        error,
+        editingItem ? OperationType.UPDATE : OperationType.CREATE,
+        editingItem ? `items/${editingItem.id}` : 'items'
+      );
+      setErrorMsg(formatUserError(error, 'Không thể lưu bài đăng. Vui lòng thử lại.'));
     } finally {
       setLoading(false);
     }
@@ -160,11 +226,39 @@ export const PostItem: React.FC<{ onCancel: () => void; onSuccess: () => void }>
 
       <div className="bg-white border border-slate-200 rounded-[2.5rem] p-8 lg:p-12 shadow-xl shadow-slate-200/50">
         <div className="mb-8">
-          <h2 className="text-3xl font-bold text-slate-900 mb-2 tracking-tight">Đăng tin chia sẻ học liệu</h2>
+          <h2 className="text-3xl font-bold text-slate-900 mb-2 tracking-tight">
+            {editingItem ? 'Chỉnh sửa bài đăng vật phẩm' : 'Đăng tin chia sẻ học liệu'}
+          </h2>
           <p className="text-slate-500 font-medium">
-            Bài đăng sẽ được Ban quản trị kiểm duyệt nhanh (FR-03) trước khi hiển thị công khai trên sàn.
+            {editingItem
+              ? 'Sau khi lưu chỉnh sửa, bài đăng sẽ được chuyển lại hàng chờ Admin duyệt (FR-03.2).'
+              : 'Bài đăng sẽ được Ban quản trị kiểm duyệt nhanh (FR-03) trước khi hiển thị công khai trên sàn.'}
           </p>
         </div>
+
+        {editingItem?.moderation_status === 'rejected' && editingItem.reject_reason && (
+          <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-2xl flex items-start gap-2.5 text-amber-900 text-sm font-semibold">
+            <AlertCircle size={18} className="shrink-0 mt-0.5 text-amber-600" />
+            <div>
+              <p className="font-bold">Lý do bị từ chối trước đó:</p>
+              <p>{editingItem.reject_reason}</p>
+            </div>
+          </div>
+        )}
+
+        {isSuspended && (
+          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-2xl flex items-start gap-2.5 text-red-700 text-sm font-semibold">
+            <AlertCircle size={18} className="shrink-0 mt-0.5" />
+            <span>Tài khoản của bạn đang bị tạm đình chỉ ({profile?.status}), không thể đăng hoặc sửa tin mới.</span>
+          </div>
+        )}
+
+        {errorMsg && (
+          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-2xl flex items-start gap-2.5 text-red-700 text-sm font-semibold">
+            <AlertCircle size={18} className="shrink-0 mt-0.5" />
+            <span>{errorMsg}</span>
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-7">
           {/* Image Upload */}
@@ -354,7 +448,7 @@ export const PostItem: React.FC<{ onCancel: () => void; onSuccess: () => void }>
           </div>
 
           <button
-            disabled={loading}
+            disabled={loading || isSuspended}
             type="submit"
             className="w-full bg-slate-900 text-white py-4 rounded-2xl font-bold text-base hover:bg-slate-800 transition-all shadow-xl shadow-slate-200 flex items-center justify-center gap-2 disabled:opacity-50"
           >
@@ -363,7 +457,7 @@ export const PostItem: React.FC<{ onCancel: () => void; onSuccess: () => void }>
             ) : (
               <>
                 <CheckCircle2 size={20} />
-                Gửi đăng tin vật phẩm
+                {editingItem ? 'Lưu thay đổi & gửi duyệt lại' : 'Gửi đăng tin vật phẩm'}
               </>
             )}
           </button>

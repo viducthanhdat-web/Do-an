@@ -10,6 +10,7 @@ import {
   serverTimestamp,
   Timestamp,
   Transaction,
+  updateDoc,
   where,
   writeBatch,
 } from 'firebase/firestore';
@@ -73,13 +74,14 @@ function applyTrustScoreDeltaInTx(params: {
   delta: number;
   eventType: TrustEventType;
   referenceId: string | null;
+  holdRefId?: string | null;
   description: string;
   nowServer: ReturnType<typeof serverTimestamp>;
 }): void {
-  const { tx, userRef, userData, delta, eventType, referenceId, description, nowServer } = params;
+  const { tx, userRef, userData, delta, eventType, referenceId, holdRefId, description, nowServer } = params;
   const currentScore = userData.current_trust_score ?? 100;
   const newBalance = Math.max(0, Math.min(200, currentScore + delta));
-  const appliedDelta = newBalance === currentScore ? 0 : delta;
+  const appliedDelta = newBalance - currentScore;
   const holdLockedUntil =
     newBalance < 50
       ? Timestamp.fromDate(new Date(Date.now() + LOCK_DURATION_MS))
@@ -90,10 +92,13 @@ function applyTrustScoreDeltaInTx(params: {
   tx.update(userRef, {
     current_trust_score: newBalance,
     hold_locked_until: holdLockedUntil,
+    ...(holdRefId ? { last_trust_ref_id: holdRefId } : {}),
     updated_at: nowServer,
   });
 
-  const trustLogRef = doc(collection(db, 'users', userRef.id, 'trust_history'));
+  const trustLogRef = holdRefId
+    ? doc(db, 'users', userRef.id, 'trust_history', `${eventType}_${holdRefId}`)
+    : doc(collection(db, 'users', userRef.id, 'trust_history'));
   tx.set(trustLogRef, {
     score_change: appliedDelta,
     balance_after: newBalance,
@@ -163,10 +168,14 @@ export async function createHoldWithTransaction(
     const proposedTimestamp = Timestamp.fromDate(proposedTime);
     const nowServer = serverTimestamp();
     const cleanNote = note.trim();
+    const itemPrice = typeof itemData.price === 'number' ? itemData.price : 0;
+    const itemType = itemData.item_type === 'sell' || itemPrice > 0 ? 'sell' : 'gift';
 
     tx.set(newHoldRef, {
       item_id: itemId,
       item_title: itemData.title,
+      item_type: itemType,
+      item_price: itemPrice,
       primary_image: itemData.primary_image || itemData.imageUrl || '',
       seller_id: sellerId,
       seller_summary: {
@@ -471,6 +480,7 @@ export async function completeHoldWithTransaction(
         delta: 5,
         eventType: 'COMPLETE_TX',
         referenceId: txRef.id,
+        holdRefId: hold.id,
         description: `Cộng 5 điểm uy tín khi hoàn tất nhận vật phẩm: ${hold.item_title}`,
         nowServer,
       });
@@ -491,7 +501,6 @@ export async function cancelHoldWithTransaction(
   const requesterRef = doc(db, 'users', hold.requester_id);
   const meetupId = hold.meetup_summary?.meetup_id || hold.id;
   const meetupRef = doc(db, 'meetups', meetupId);
-  const penalizeRequester = actorUid === hold.requester_id;
 
   await runTransaction(db, async (tx) => {
     const [holdSnap, itemSnap, reqSnap, meetupSnap] = await Promise.all([
@@ -505,6 +514,11 @@ export async function cancelHoldWithTransaction(
       throw new Error('Lịch hẹn đã kết thúc hoặc đã được hủy trước đó.');
     }
 
+    const holdData = holdSnap.data();
+    if (actorUid !== holdData.seller_id && actorUid !== holdData.requester_id) {
+      throw new Error('Bạn không có quyền hủy phiên giữ chỗ này.');
+    }
+    const penalizeRequester = actorUid === holdData.requester_id;
     const nowServer = serverTimestamp();
 
     tx.update(holdRef, {
@@ -536,6 +550,7 @@ export async function cancelHoldWithTransaction(
         delta: -10,
         eventType: 'CANCEL_HOLD',
         referenceId: hold.id,
+        holdRefId: hold.id,
         description: `Trừ 10 điểm do hủy giữ chỗ vật phẩm: ${hold.item_title}`,
         nowServer,
       });
@@ -614,6 +629,7 @@ export async function releaseExpiredHoldsIfAny(): Promise<number> {
               delta: -10,
               eventType: 'EXPIRED_HOLD',
               referenceId: holdDoc.id,
+              holdRefId: holdDoc.id,
               description: `Trừ 10 điểm do quá hạn giữ chỗ 24-48h: ${data.item_title}`,
               nowServer,
             });
@@ -673,6 +689,32 @@ export async function moderateItemWithBatch(
   });
 
   await batch.commit();
+}
+
+/**
+ * FR-03 & FR-07: Admin tạm khóa / mở khóa tài khoản sinh viên vi phạm
+ */
+export async function setUserAccountStatusByAdmin(
+  targetUid: string,
+  status: 'active' | 'suspended' | 'banned'
+): Promise<void> {
+  await updateDoc(doc(db, 'users', targetUid), {
+    status,
+    updated_at: serverTimestamp(),
+  });
+}
+
+/**
+ * FR-03.3: Admin bật/tắt trạng thái hoạt động của Danh mục / Môn học / Điểm hẹn
+ */
+export async function toggleCatalogActiveByAdmin(
+  collectionName: 'categories' | 'subjects' | 'meetup_locations',
+  docId: string,
+  isActive: boolean
+): Promise<void> {
+  await updateDoc(doc(db, collectionName, docId), {
+    is_active: isActive,
+  });
 }
 
 /**

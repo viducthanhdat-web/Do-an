@@ -216,10 +216,18 @@ export const CATEGORY_LABELS: Record<string, string> = {
 export function normalizeUserDoc(
   uid: string,
   raw: any,
-  fallback?: { email?: string | null; displayName?: string | null; phoneNumber?: string | null; photoURL?: string | null }
+  fallback?: {
+    email?: string | null;
+    displayName?: string | null;
+    phoneNumber?: string | null;
+    photoURL?: string | null;
+    emailVerified?: boolean;
+  }
 ): UserProfile {
   const email = raw?.email ?? fallback?.email ?? '';
-  const isDefaultAdmin = email === BOOTSTRAP_ADMIN_EMAIL;
+  const isDefaultAdmin =
+    email === BOOTSTRAP_ADMIN_EMAIL &&
+    (raw?.role === 'admin' || Boolean(fallback?.emailVerified));
   return {
     uid,
     student_id_code:
@@ -239,6 +247,7 @@ export function normalizeUserDoc(
         : 100,
     status: raw?.status || 'active',
     hold_locked_until: raw?.hold_locked_until ?? null,
+    last_trust_ref_id: raw?.last_trust_ref_id ?? null,
     created_at: raw?.created_at || raw?.createdAt || null,
     updated_at: raw?.updated_at || raw?.updatedAt || null,
   };
@@ -256,11 +265,20 @@ export function normalizeHoldDoc(id: string, raw: any): HoldDoc {
         ? 24
         : 48
       : undefined;
+  const itemPrice = typeof raw.item_price === 'number' ? raw.item_price : undefined;
+  const itemType: ItemType | undefined =
+    raw.item_type === 'sell' || (itemPrice !== undefined && itemPrice > 0)
+      ? 'sell'
+      : raw.item_type === 'gift' || itemPrice === 0
+      ? 'gift'
+      : undefined;
 
   return {
     id,
     item_id: raw.item_id || raw.itemId || '',
     item_title: raw.item_title || raw.itemTitle || 'Vật phẩm học tập',
+    item_type: itemType,
+    item_price: itemPrice,
     primary_image: raw.primary_image || '',
     seller_id: raw.seller_id || raw.sellerId || '',
     seller_summary: raw.seller_summary || {

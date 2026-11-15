@@ -98,9 +98,13 @@ exports.createHoldOrder = (0, https_1.onCall)(async (request) => {
         const sellerData = sellerSnap.data() || {};
         const expiresAt = firestore_1.Timestamp.fromMillis(expiresAtMs);
         const proposedTime = firestore_1.Timestamp.fromDate(parsedProposedDate);
+        const itemPrice = typeof itemData.price === "number" ? itemData.price : 0;
+        const itemType = itemData.item_type === "sell" || itemPrice > 0 ? "sell" : "gift";
         transaction.set(newHoldRef, {
             item_id: itemId,
             item_title: itemData.title,
+            item_type: itemType,
+            item_price: itemPrice,
             primary_image: itemData.primary_image || "",
             seller_id: itemData.seller_id,
             seller_summary: {
@@ -188,7 +192,7 @@ exports.scheduledHoldAutoRelease = (0, scheduler_1.onSchedule)("every 5 minutes"
             ]);
             const currentScore = requesterSnap.data()?.current_trust_score ?? 100;
             const newBalance = Math.max(0, Math.min(200, currentScore - 10));
-            const appliedDelta = newBalance === currentScore ? 0 : -10;
+            const appliedDelta = newBalance - currentScore;
             const holdLockedUntil = newBalance < 50
                 ? firestore_1.Timestamp.fromMillis(now.toMillis() + 7 * 24 * 3600 * 1000)
                 : requesterSnap.data()?.hold_locked_until ?? null;
@@ -214,9 +218,12 @@ exports.scheduledHoldAutoRelease = (0, scheduler_1.onSchedule)("every 5 minutes"
                 tx.update(requesterRef, {
                     current_trust_score: newBalance,
                     hold_locked_until: holdLockedUntil,
+                    last_trust_ref_id: holdDoc.id,
                     updated_at: now,
                 });
-                const trustLogRef = requesterRef.collection("trust_history").doc();
+                const trustLogRef = requesterRef
+                    .collection("trust_history")
+                    .doc(`EXPIRED_HOLD_${holdDoc.id}`);
                 tx.set(trustLogRef, {
                     score_change: appliedDelta,
                     balance_after: newBalance,

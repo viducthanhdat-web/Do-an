@@ -18,6 +18,7 @@ rules_version = '2';
 //    - current_trust_score: int (required, 100 on create, 0..200)
 //    - status: 'active' | 'locked' | 'suspended' | 'banned' | 'disabled' (required, 'active' on create)
 //    - hold_locked_until: timestamp | string | null (optional)
+//    - last_trust_ref_id: string | null (optional, <= 128 chars)
 //    - created_at: timestamp (required, immutable, == request.time on create)
 //    - updated_at: timestamp (required, == request.time on write)
 //
@@ -76,6 +77,8 @@ rules_version = '2';
 // 8. /holds/{holdId}
 //    - item_id: string (required)
 //    - item_title: string (required, 1..100 chars)
+//    - item_type: 'gift' | 'sell' | null (optional)
+//    - item_price: number | null (optional, 0..1000000000)
 //    - primary_image: string | null (optional, <= 200000 chars)
 //    - seller_id: string (required)
 //    - seller_summary: map | null (optional, <= 10 keys)
@@ -148,7 +151,8 @@ service cloud.firestore {
     function isBootstrapAdminEmail() {
       return isSignedIn() &&
              'email' in request.auth.token &&
-             request.auth.token.email == 'viducthanhdat3@gmail.com';
+             request.auth.token.email == 'viducthanhdat3@gmail.com' &&
+             request.auth.token.get('email_verified', false) == true;
     }
 
     function isAdmin() {
@@ -162,6 +166,11 @@ service cloud.firestore {
     function isDatabaseAdmin() {
       let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid));
       return userDoc != null && userDoc.data.get('role', '') == 'admin';
+    }
+
+    function isActiveUser() {
+      let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid));
+      return isSignedIn() && userDoc != null && userDoc.data.get('status', 'active') == 'active';
     }
 
     function isItemSeller(itemId) {
@@ -179,9 +188,9 @@ service cloud.firestore {
     function isTransactionParticipantAfter(txId) {
       let txAfter = getAfter(/databases/$(database)/documents/transactions/$(txId));
       return txAfter != null &&
-             (isAdmin() ||
-              txAfter.data.seller_id == request.auth.uid ||
-              txAfter.data.buyer_id == request.auth.uid);
+             (txAfter.data.seller_id == request.auth.uid ||
+              txAfter.data.buyer_id == request.auth.uid ||
+              isAdmin());
     }
 
     function incoming() {
@@ -237,7 +246,7 @@ service cloud.firestore {
       let allowed = [
         'uid', 'student_id_code', 'email', 'full_name', 'phone_number',
         'avatar_url', 'role', 'current_trust_score', 'status',
-        'hold_locked_until', 'created_at', 'updated_at'
+        'hold_locked_until', 'last_trust_ref_id', 'created_at', 'updated_at'
       ];
       return hasRequiredFields(data, required) &&
              hasOnlyAllowedFields(data, allowed) &&
@@ -253,6 +262,7 @@ service cloud.firestore {
              (!('hold_locked_until' in data) || data.hold_locked_until == null ||
               data.hold_locked_until is timestamp ||
               (data.hold_locked_until is string && data.hold_locked_until.size() <= 64)) &&
+             isOptionalNullableString(data, 'last_trust_ref_id', 128) &&
              data.created_at is timestamp &&
              data.updated_at is timestamp;
     }
@@ -354,15 +364,18 @@ service cloud.firestore {
         'created_at', 'updated_at'
       ];
       let allowed = [
-        'item_id', 'item_title', 'primary_image', 'seller_id', 'seller_summary',
-        'requester_id', 'requester_summary', 'meetup_summary',
-        'hold_start_time', 'hold_expires_at', 'hold_status', 'cancel_reason',
-        'created_at', 'updated_at'
+        'item_id', 'item_title', 'item_type', 'item_price', 'primary_image',
+        'seller_id', 'seller_summary', 'requester_id', 'requester_summary',
+        'meetup_summary', 'hold_start_time', 'hold_expires_at', 'hold_status',
+        'cancel_reason', 'created_at', 'updated_at'
       ];
       return hasRequiredFields(data, required) &&
              hasOnlyAllowedFields(data, allowed) &&
              isValidId(data.item_id) &&
              data.item_title is string && data.item_title.size() >= 1 && data.item_title.size() <= 100 &&
+             (!('item_type' in data) || data.item_type == null || data.item_type in ['gift', 'sell']) &&
+             (!('item_price' in data) || data.item_price == null ||
+              (data.item_price is number && data.item_price >= 0 && data.item_price <= 1000000000)) &&
              isOptionalNullableString(data, 'primary_image', 200000) &&
              isValidId(data.seller_id) &&
              (!('seller_summary' in data) || data.seller_summary == null ||
@@ -499,6 +512,15 @@ service cloud.firestore {
              );
     }
 
+    function isExpiredHoldRef(holdId) {
+      let holdDoc = get(/databases/$(database)/documents/holds/$(holdId));
+      return exists(/databases/$(database)/documents/holds/$(holdId)) &&
+             holdDoc != null &&
+             'hold_expires_at' in holdDoc.data &&
+             holdDoc.data.hold_expires_at is timestamp &&
+             holdDoc.data.hold_expires_at <= request.time;
+    }
+
     function isExpiredHoldMeetupCancel() {
       let holdDoc = get(/databases/$(database)/documents/holds/$(existing().hold_id));
       return isSignedIn() &&
@@ -531,6 +553,188 @@ service cloud.firestore {
              itemAfter.data.get('active_hold_id', null) == holdId;
     }
 
+    function isCappedPlus5(oldScore, newScore) {
+      return oldScore is int &&
+             newScore is int &&
+             newScore >= 0 &&
+             newScore <= 200 &&
+             ((oldScore >= 195 && newScore == 200) ||
+              (oldScore < 195 && newScore == oldScore + 5));
+    }
+
+    function isFlooredMinus10(oldScore, newScore) {
+      return oldScore is int &&
+             newScore is int &&
+             newScore >= 0 &&
+             newScore <= 200 &&
+             ((oldScore <= 10 && newScore == 0) ||
+              (oldScore > 10 && newScore == oldScore - 10));
+    }
+
+    function isValidHoldLockTransition(oldData, newData) {
+      return (newData.current_trust_score < 50 &&
+              'hold_locked_until' in newData &&
+              newData.hold_locked_until is timestamp &&
+              newData.hold_locked_until >= request.time + duration.value(6, 'd') &&
+              newData.hold_locked_until <= request.time + duration.value(8, 'd')) ||
+             (newData.current_trust_score >= 50 &&
+              newData.get('hold_locked_until', null) == oldData.get('hold_locked_until', null));
+    }
+
+    function isValidControlledTrustUpdate(userId) {
+      let refId = incoming().last_trust_ref_id;
+      let holdBefore = get(/databases/$(database)/documents/holds/$(refId));
+      let holdAfter = getAfter(/databases/$(database)/documents/holds/$(refId));
+      let completeLogId = 'COMPLETE_TX_' + refId;
+      let cancelLogId = 'CANCEL_HOLD_' + refId;
+      let expiredLogId = 'EXPIRED_HOLD_' + refId;
+      return isSignedIn() &&
+             incoming().diff(existing()).affectedKeys().hasOnly([
+               'current_trust_score', 'hold_locked_until', 'last_trust_ref_id', 'updated_at'
+             ]) &&
+             'last_trust_ref_id' in incoming() &&
+             isValidId(incoming().last_trust_ref_id) &&
+             incoming().updated_at == request.time &&
+             holdBefore != null &&
+             holdAfter != null &&
+             holdBefore.data.hold_status == 'active' &&
+             holdBefore.data.requester_id == userId &&
+             (
+               (request.auth.uid == holdBefore.data.seller_id &&
+                holdAfter.data.hold_status == 'converted' &&
+                isCappedPlus5(existing().current_trust_score, incoming().current_trust_score) &&
+                incoming().get('hold_locked_until', null) == null &&
+                getAfter(/databases/$(database)/documents/users/$(userId)/trust_history/$(completeLogId)) != null) ||
+               (request.auth.uid == userId &&
+                holdAfter.data.hold_status == 'cancelled' &&
+                isFlooredMinus10(existing().current_trust_score, incoming().current_trust_score) &&
+                isValidHoldLockTransition(existing(), incoming()) &&
+                getAfter(/databases/$(database)/documents/users/$(userId)/trust_history/$(cancelLogId)) != null) ||
+               (holdBefore.data.hold_expires_at <= request.time &&
+                holdAfter.data.hold_status == 'expired' &&
+                isFlooredMinus10(existing().current_trust_score, incoming().current_trust_score) &&
+                isValidHoldLockTransition(existing(), incoming()) &&
+                getAfter(/databases/$(database)/documents/users/$(userId)/trust_history/$(expiredLogId)) != null)
+             );
+    }
+
+    function isValidHoldTrustHistoryForRef(userId, logId, userAfter, refId) {
+      let holdBefore = get(/databases/$(database)/documents/holds/$(refId));
+      let holdAfter = getAfter(/databases/$(database)/documents/holds/$(refId));
+      return logId == incoming().event_type + '_' + refId &&
+             !exists(/databases/$(database)/documents/users/$(userId)/trust_history/$(logId)) &&
+             incoming().balance_after == userAfter.data.current_trust_score &&
+             incoming().created_at == request.time &&
+             holdBefore != null &&
+             holdAfter != null &&
+             holdBefore.data.hold_status == 'active' &&
+             holdBefore.data.requester_id == userId &&
+             (
+               (incoming().event_type == 'COMPLETE_TX' &&
+                request.auth.uid == holdBefore.data.seller_id &&
+                holdAfter.data.hold_status == 'converted' &&
+                incoming().score_change >= 0 &&
+                incoming().score_change <= 5) ||
+               (incoming().event_type == 'CANCEL_HOLD' &&
+                request.auth.uid == userId &&
+                holdAfter.data.hold_status == 'cancelled' &&
+                incoming().score_change >= -10 &&
+                incoming().score_change <= 0) ||
+               (incoming().event_type == 'EXPIRED_HOLD' &&
+                holdBefore.data.hold_expires_at <= request.time &&
+                holdAfter.data.hold_status == 'expired' &&
+                incoming().score_change >= -10 &&
+                incoming().score_change <= 0)
+             );
+    }
+
+    function isValidHoldTrustHistoryCreate(userId, logId) {
+      let userAfter = getAfter(/databases/$(database)/documents/users/$(userId));
+      return isSignedIn() &&
+             incoming().event_type in ['COMPLETE_TX', 'CANCEL_HOLD', 'EXPIRED_HOLD'] &&
+             userAfter != null &&
+             'last_trust_ref_id' in userAfter.data &&
+             isValidId(userAfter.data.last_trust_ref_id) &&
+             isValidHoldTrustHistoryForRef(userId, logId, userAfter, userAfter.data.last_trust_ref_id);
+    }
+
+    function isValidHoldMeetupUpdate() {
+      return (isOwner(existing().requester_id) || isOwner(existing().seller_id)) &&
+             incoming().hold_status == 'active' &&
+             incoming().diff(existing()).affectedKeys().hasOnly(['meetup_summary', 'updated_at']) &&
+             (
+               !('meetup_summary' in incoming()) ||
+               !(incoming().meetup_summary is map) ||
+               (
+                 (incoming().meetup_summary.get('status', '') != 'confirmed' ||
+                  ('meetup_summary' in existing() &&
+                   existing().meetup_summary is map &&
+                   existing().meetup_summary.get('status', '') == 'confirmed') ||
+                  isOwner(existing().seller_id)) &&
+                 (incoming().meetup_summary.get('buyer_confirmed', false) != true ||
+                  ('meetup_summary' in existing() &&
+                   existing().meetup_summary is map &&
+                   existing().meetup_summary.get('buyer_confirmed', false) == true) ||
+                  isOwner(existing().requester_id))
+               )
+             );
+    }
+
+    function isValidHoldStateSync(holdId) {
+      let itemAfter = getAfter(/databases/$(database)/documents/items/$(existing().item_id));
+      let reqAfter = getAfter(/databases/$(database)/documents/users/$(existing().requester_id));
+      return (incoming().hold_status == 'converted' &&
+              isOwner(existing().seller_id) &&
+              itemAfter != null &&
+              itemAfter.data.item_status == 'completed' &&
+              itemAfter.data.get('active_hold_id', null) == null &&
+              reqAfter != null &&
+              reqAfter.data.get('last_trust_ref_id', '') == holdId) ||
+             (incoming().hold_status == 'cancelled' &&
+              (!exists(/databases/$(database)/documents/items/$(existing().item_id)) ||
+               (itemAfter != null &&
+                itemAfter.data.item_status == 'available' &&
+                itemAfter.data.get('active_hold_id', null) == null)) &&
+              (isOwner(existing().seller_id) ||
+               (isOwner(existing().requester_id) &&
+                reqAfter != null &&
+                reqAfter.data.get('last_trust_ref_id', '') == holdId))) ||
+             (incoming().hold_status == 'expired' &&
+              existing().hold_expires_at <= request.time &&
+              (!exists(/databases/$(database)/documents/items/$(existing().item_id)) ||
+               (itemAfter != null &&
+                itemAfter.data.item_status == 'available' &&
+                itemAfter.data.get('active_hold_id', null) == null)) &&
+              (!exists(/databases/$(database)/documents/users/$(existing().requester_id)) ||
+               (reqAfter != null &&
+                reqAfter.data.get('last_trust_ref_id', '') == holdId)));
+    }
+
+    function isValidAtomicMeetupCreate(meetupId) {
+      let holdAfter = getAfter(/databases/$(database)/documents/holds/$(meetupId));
+      return holdAfter != null &&
+             holdAfter.data.item_id == incoming().item_id &&
+             holdAfter.data.seller_id == incoming().seller_id &&
+             holdAfter.data.requester_id == request.auth.uid &&
+             holdAfter.data.hold_status == 'active';
+    }
+
+    function isValidAtomicTransactionCreate() {
+      let holdBefore = get(/databases/$(database)/documents/holds/$(incoming().hold_id));
+      let holdAfter = getAfter(/databases/$(database)/documents/holds/$(incoming().hold_id));
+      return incoming().seller_id == request.auth.uid &&
+             incoming().current_status == 'completed' &&
+             'completed_at' in incoming() &&
+             incoming().completed_at == request.time &&
+             holdBefore != null &&
+             holdAfter != null &&
+             holdBefore.data.hold_status == 'active' &&
+             holdAfter.data.hold_status == 'converted' &&
+             holdBefore.data.item_id == incoming().item_id &&
+             holdBefore.data.seller_id == incoming().seller_id &&
+             holdBefore.data.requester_id == incoming().buyer_id;
+    }
+
     // =========================================================================
     // 1. /users/{userId} + 2. /users/{userId}/trust_history/{logId}
     // =========================================================================
@@ -545,31 +749,29 @@ service cloud.firestore {
                     (!('uid' in incoming()) || incoming().uid == userId) &&
                     incoming().current_trust_score == 100 &&
                     incoming().status == 'active' &&
+                    incoming().get('last_trust_ref_id', null) == null &&
                     (incoming().role == 'student' ||
                      (incoming().role == 'admin' && isBootstrapAdminEmail())) &&
                     incoming().created_at == request.time &&
                     incoming().updated_at == request.time;
 
       allow update: if isValidUser(incoming()) && (
-                      isAdmin() ||
                       // Owner updating own editable profile fields only
                       (isOwner(userId) &&
                        incoming().diff(existing()).affectedKeys().hasOnly([
                          'student_id_code', 'full_name', 'phone_number', 'avatar_url', 'updated_at'
                        ]) &&
                        incoming().updated_at == request.time) ||
-                      // Controlled trust score delta during tx completion (+5) or hold cancel/expiry (-10)
+                      // Controlled trust score delta bound atomically to an active Hold resolution & trust_history log
                       (isSignedIn() &&
+                       'last_trust_ref_id' in incoming() &&
+                       isValidId(incoming().last_trust_ref_id) &&
                        incoming().diff(existing()).affectedKeys().hasOnly([
-                         'current_trust_score', 'hold_locked_until', 'updated_at'
+                         'current_trust_score', 'hold_locked_until', 'last_trust_ref_id', 'updated_at'
                        ]) &&
-                       incoming().current_trust_score is int &&
-                       incoming().current_trust_score >= 0 &&
-                       incoming().current_trust_score <= 200 &&
-                       (incoming().current_trust_score - existing().current_trust_score in [5, -10] ||
-                        (incoming().current_trust_score == 0 && existing().current_trust_score >= 0 && existing().current_trust_score <= 10) ||
-                        (incoming().current_trust_score == 200 && existing().current_trust_score >= 195 && existing().current_trust_score <= 200)) &&
-                       incoming().updated_at == request.time)
+                       incoming().updated_at == request.time &&
+                       isValidControlledTrustUpdate(userId)) ||
+                      isAdmin()
                     );
 
       allow delete: if isAdmin();
@@ -581,13 +783,17 @@ service cloud.firestore {
         allow create: if isValidId(logId) &&
                       isValidTrustHistoryLog(incoming()) &&
                       getAfter(/databases/$(database)/documents/users/$(userId)) != null &&
-                      (isAdmin() ||
-                       (isSignedIn() &&
-                        incoming().event_type in ['INIT', 'COMPLETE_TX', 'CANCEL_HOLD', 'EXPIRED_HOLD'] &&
-                        (incoming().score_change in [0, 5, -10] ||
-                         (incoming().event_type == 'INIT' && isOwner(userId) && incoming().score_change == 100)) &&
-                        incoming().balance_after <= 200 &&
-                        incoming().created_at == request.time));
+                      (
+                        (logId == 'INIT' &&
+                         isOwner(userId) &&
+                         !exists(/databases/$(database)/documents/users/$(userId)) &&
+                         incoming().event_type == 'INIT' &&
+                         incoming().score_change == 0 &&
+                         incoming().balance_after == 100 &&
+                         incoming().created_at == request.time) ||
+                        isValidHoldTrustHistoryCreate(userId, logId) ||
+                        isAdmin()
+                      );
 
         allow update, delete: if false;
       }
@@ -639,12 +845,12 @@ service cloud.firestore {
                     incoming().item_status == 'available' &&
                     incoming().get('active_hold_id', null) == null &&
                     (incoming().moderation_status == 'pending' ||
-                     (isAdmin() && incoming().moderation_status == 'approved')) &&
+                     (incoming().moderation_status == 'approved' && isAdmin())) &&
                     incoming().created_at == request.time &&
-                    incoming().updated_at == request.time;
+                    incoming().updated_at == request.time &&
+                    (isActiveUser() || isAdmin());
 
       allow update: if isValidItem(incoming()) && (
-                      isAdmin() ||
                       // Seller editing own item while not held or completed
                       (isOwner(existing().seller_id) &&
                        existing().item_status != 'held' &&
@@ -660,19 +866,21 @@ service cloud.firestore {
                       // Requester placing an atomic Hold (available -> held)
                       ('active_hold_id' in incoming() &&
                        incoming().active_hold_id is string &&
+                       incoming().active_hold_id.size() >= 1 &&
                        isValidAtomicHoldPlacement(itemId)) ||
                       // Completing or Releasing/Cancelling a Hold (held -> completed | available)
                       ('active_hold_id' in existing() &&
                        existing().active_hold_id is string &&
                        existing().active_hold_id.size() >= 1 &&
-                       isValidHoldResolution())
+                       isValidHoldResolution()) ||
+                      isAdmin()
                     );
 
       allow delete: if (isOwner(existing().seller_id) && existing().item_status != 'held') || isAdmin();
 
       // 7. Append-only Moderation Audit Logs
       match /moderation_logs/{modLogId} {
-        allow read: if isAdmin() || isItemSeller(itemId);
+        allow read: if isItemSeller(itemId) || isAdmin();
 
         allow create: if isAdmin() &&
                       isValidId(modLogId) &&
@@ -708,30 +916,21 @@ service cloud.firestore {
                     canRequesterCreateHold(holdId, incoming());
 
       allow update: if isValidHold(incoming()) && (
-                      isAdmin() ||
                       (isSignedIn() &&
                        existing().hold_status == 'active' &&
                        incoming().updated_at == request.time &&
                        (
                          // Branch A: Active meetup coordination & buyer receipt handshake
-                         ((isOwner(existing().requester_id) || isOwner(existing().seller_id)) &&
-                          incoming().hold_status == 'active' &&
-                          incoming().diff(existing()).affectedKeys().hasOnly([
-                            'meetup_summary', 'updated_at'
-                          ])) ||
+                         isValidHoldMeetupUpdate() ||
                          // Branch B: Hold resolution (converted | cancelled | expired)
                          (incoming().diff(existing()).affectedKeys().hasOnly([
                             'hold_status', 'cancel_reason', 'updated_at'
                           ]) &&
-                          (
-                            (isOwner(existing().seller_id) &&
-                             incoming().hold_status == 'converted') ||
-                            ((isOwner(existing().requester_id) || isOwner(existing().seller_id)) &&
-                             incoming().hold_status == 'cancelled') ||
-                            (existing().hold_expires_at <= request.time &&
-                             incoming().hold_status == 'expired')
-                          ))
-                       ))
+                          isValidId(existing().item_id) &&
+                          isValidId(existing().requester_id) &&
+                          isValidHoldStateSync(holdId))
+                       )) ||
+                      isAdmin()
                     );
 
       allow delete: if isAdmin();
@@ -745,20 +944,24 @@ service cloud.firestore {
       allow read: if isSignedIn() && (
                     resource.data.buyer_id == request.auth.uid ||
                     resource.data.seller_id == request.auth.uid ||
+                    ('hold_id' in resource.data &&
+                     isValidId(resource.data.hold_id) &&
+                     isExpiredHoldRef(resource.data.hold_id)) ||
                     isAdmin()
                   );
 
       allow create: if isSignedIn() &&
                     isValidId(meetupId) &&
                     isValidMeetup(incoming()) &&
+                    incoming().hold_id == meetupId &&
                     incoming().buyer_id == request.auth.uid &&
                     incoming().buyer_id != incoming().seller_id &&
                     incoming().status == 'proposed' &&
                     incoming().created_at == request.time &&
-                    incoming().updated_at == request.time;
+                    incoming().updated_at == request.time &&
+                    isValidAtomicMeetupCreate(meetupId);
 
       allow update: if isValidMeetup(incoming()) && (
-                      isAdmin() ||
                       (isSignedIn() &&
                        (isOwner(existing().buyer_id) || isOwner(existing().seller_id)) &&
                        incoming().diff(existing()).affectedKeys().hasOnly([
@@ -769,7 +972,8 @@ service cloud.firestore {
                       (isSignedIn() &&
                        'hold_id' in existing() &&
                        isValidId(existing().hold_id) &&
-                       isExpiredHoldMeetupCancel())
+                       isExpiredHoldMeetupCancel()) ||
+                      isAdmin()
                     );
 
       allow delete: if isAdmin();
@@ -789,30 +993,32 @@ service cloud.firestore {
       allow create: if isSignedIn() &&
                     isValidId(txId) &&
                     isValidTransaction(incoming()) &&
-                    (incoming().buyer_id == request.auth.uid ||
-                     incoming().seller_id == request.auth.uid ||
-                     isAdmin()) &&
                     incoming().seller_id != incoming().buyer_id &&
-                    incoming().current_status in ['pending', 'completed'] &&
                     incoming().created_at == request.time &&
-                    incoming().updated_at == request.time;
+                    incoming().updated_at == request.time &&
+                    (
+                      (isValidId(incoming().hold_id) &&
+                       isValidAtomicTransactionCreate()) ||
+                      (incoming().current_status in ['pending', 'completed'] &&
+                       isAdmin())
+                    );
 
       allow update: if isValidTransaction(incoming()) && (
-                      isAdmin() ||
                       (isSignedIn() &&
                        (isOwner(existing().buyer_id) || isOwner(existing().seller_id)) &&
                        incoming().diff(existing()).affectedKeys().hasOnly([
                          'current_status', 'completed_at', 'updated_at'
                        ]) &&
                        incoming().current_status in ['completed', 'disputed', 'cancelled'] &&
-                       incoming().updated_at == request.time)
+                       incoming().updated_at == request.time) ||
+                      isAdmin()
                     );
 
       allow delete: if isAdmin();
 
       // 11. Append-only Transaction Status Logs
       match /status_logs/{logId} {
-        allow read: if isAdmin() || isTransactionParticipant(txId);
+        allow read: if isTransactionParticipant(txId) || isAdmin();
 
         allow create: if isSignedIn() &&
                       isValidId(logId) &&

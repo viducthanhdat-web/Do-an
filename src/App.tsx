@@ -13,7 +13,15 @@ import { AnimatePresence } from 'motion/react';
 function AppContent() {
   const [activeTab, setActiveTab] = useState('marketplace');
   const [selectedItem, setSelectedItem] = useState<ItemDoc | null>(null);
+  const [editingItem, setEditingItem] = useState<ItemDoc | null>(null);
   const { loading } = useAuth();
+
+  const handleSetActiveTab = (tab: string) => {
+    if (tab !== 'post' || activeTab !== 'post') {
+      setEditingItem(null);
+    }
+    setActiveTab(tab);
+  };
 
   if (loading) {
     return (
@@ -29,20 +37,35 @@ function AppContent() {
   }
 
   return (
-    <Layout activeTab={activeTab} setActiveTab={setActiveTab}>
+    <Layout activeTab={activeTab} setActiveTab={handleSetActiveTab}>
       <AnimatePresence mode="wait">
         {activeTab === 'marketplace' && (
           <Marketplace key="marketplace" onSelectItem={setSelectedItem} />
         )}
         {activeTab === 'post' && (
           <PostItem
-            key="post"
-            onCancel={() => setActiveTab('marketplace')}
-            onSuccess={() => setActiveTab('my-items')}
+            key={editingItem ? `post-edit-${editingItem.id}` : 'post-new'}
+            editingItem={editingItem}
+            onCancel={() => {
+              setEditingItem(null);
+              setActiveTab(editingItem ? 'my-items' : 'marketplace');
+            }}
+            onSuccess={() => {
+              setEditingItem(null);
+              setActiveTab('my-items');
+            }}
           />
         )}
         {activeTab === 'my-holds' && <MyHolds key="my-holds" />}
-        {activeTab === 'my-items' && <MyItems key="my-items" />}
+        {activeTab === 'my-items' && (
+          <MyItems
+            key="my-items"
+            onEditItem={(item) => {
+              setEditingItem(item);
+              setActiveTab('post');
+            }}
+          />
+        )}
         {activeTab === 'admin' && <AdminDashboard key="admin" />}
       </AnimatePresence>
 
