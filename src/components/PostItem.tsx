@@ -25,6 +25,8 @@ import {
   Coins,
   CheckCircle2,
   AlertCircle,
+  ChevronUp,
+  ChevronDown,
 } from 'lucide-react';
 
 const MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024;
@@ -36,6 +38,7 @@ export const PostItem: React.FC<{
 }> = ({ onCancel, onSuccess, editingItem }) => {
   const { user, profile } = useAuth();
   const [loading, setLoading] = useState(false);
+  const [priceInput, setPriceInput] = useState(editingItem?.price ? String(editingItem.price) : '');
   const [errorMsg, setErrorMsg] = useState('');
   const [subjects, setSubjects] = useState<SubjectDoc[]>(DEFAULT_SUBJECTS);
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -64,6 +67,7 @@ export const PostItem: React.FC<{
   useEffect(() => {
     setErrorMsg('');
     setImageFile(null);
+    setPriceInput(editingItem?.price ? String(editingItem.price) : '');
     setImagePreview(editingItem?.primary_image || null);
     setFormData({
       title: editingItem?.title || '',
@@ -379,9 +383,9 @@ export const PostItem: React.FC<{
                 onChange={(e) => setFormData({ ...formData, condition_level: e.target.value as ConditionLevel })}
                 className="w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-slate-900 outline-none font-semibold"
               >
-                <option value="new_99">Mới 95–99% (Như mới, chưa viết vẽ)</option>
-                <option value="used_good">Tốt 80–90% (Đủ trang, bìa đẹp)</option>
-                <option value="used_acceptable">Khá 60–75% (Có ghi chú / highlight ôn thi)</option>
+                <option value="new_99">Mới 95–99%</option>
+                <option value="used_good">Tốt 80–90%</option>
+                <option value="used_acceptable">Khá 60–75%</option>
               </select>
             </div>
 
@@ -390,7 +394,10 @@ export const PostItem: React.FC<{
               <div className="grid grid-cols-2 gap-3">
                 <button
                   type="button"
-                  onClick={() => setFormData({ ...formData, item_type: 'gift', price: 0 })}
+                  onClick={() => {
+                    setFormData({ ...formData, item_type: 'gift', price: 0 });
+                    setPriceInput('');
+                  }}
                   className={`py-3.5 px-3 rounded-2xl border-2 font-bold text-xs flex items-center justify-center gap-1.5 transition-all ${
                     formData.item_type === 'gift'
                       ? 'border-emerald-600 bg-emerald-600 text-white'
@@ -401,9 +408,11 @@ export const PostItem: React.FC<{
                 </button>
                 <button
                   type="button"
-                  onClick={() =>
-                    setFormData({ ...formData, item_type: 'sell', price: formData.price > 0 ? formData.price : 20000 })
-                  }
+                  onClick={() => {
+                    const nextPrice = formData.price > 0 ? formData.price : 20000;
+                    setFormData({ ...formData, item_type: 'sell', price: nextPrice });
+                    setPriceInput(String(nextPrice));
+                  }}
                   className={`py-3.5 px-3 rounded-2xl border-2 font-bold text-xs flex items-center justify-center gap-1.5 transition-all ${
                     formData.item_type === 'sell'
                       ? 'border-slate-900 bg-slate-900 text-white'
@@ -415,22 +424,72 @@ export const PostItem: React.FC<{
               </div>
             </div>
           </div>
-
+          
           {formData.item_type === 'sell' && (
-            <div className="space-y-2">
-              <label className="text-sm font-bold text-slate-700">Mức giá tượng trưng (VND)</label>
-              <div className="relative">
-                <input
-                  required
-                  type="number"
-                  min={1000}
-                  step={1000}
-                  value={formData.price}
-                  onChange={(e) => setFormData({ ...formData, price: parseInt(e.target.value, 10) || 0 })}
-                  className="w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-slate-900 outline-none font-bold"
-                />
-                <span className="absolute right-4 top-1/2 -translate-y-1/2 font-bold text-slate-400">VND</span>
+            <div className="space-y-2.5">
+              <label className="text-sm font-bold text-slate-700">
+                Mức giá tượng trưng (VND)
+              </label>
+
+              <div className="flex items-center gap-3">
+                <div className="flex flex-col gap-1">
+                  <button
+                    type="button"
+                    aria-label="Tăng giá 10.000 đồng"
+                    onClick={() => {
+                      const nextPrice = (Number(priceInput) || 0) + 10000;
+                      setPriceInput(String(nextPrice));
+                      setFormData({ ...formData, price: nextPrice });
+                    }}
+                    className="w-11 h-9 flex items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-200 transition-colors"
+                  >
+                    <ChevronUp size={18} />
+                  </button>
+
+                  <button
+                    type="button"
+                    aria-label="Giảm giá 10.000 đồng"
+                    onClick={() => {
+                      const currentPrice = Number(priceInput) || 0;
+                      const nextPrice = Math.max(1000, currentPrice - 10000);
+                      setPriceInput(String(nextPrice));
+                      setFormData({ ...formData, price: nextPrice });
+                    }}
+                    className="w-11 h-9 flex items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-200 transition-colors"
+                  >
+                    <ChevronDown size={18} />
+                  </button>
+                </div>
+
+                <div className="flex-1 relative">
+                  <input
+                    required
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="Ví dụ: 50.000"
+                    value={priceInput}
+                    onChange={(e) => {
+                      const digits = e.target.value.replace(/\D/g, '');
+                      const normalized = digits.replace(/^0+(?=\d)/, '');
+
+                      setPriceInput(normalized);
+                      setFormData({
+                        ...formData,
+                        price: normalized === '' ? 0 : Number(normalized),
+                      });
+                    }}
+                    className="w-full px-4 py-3.5 pr-16 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-slate-900 outline-none font-bold text-slate-900 placeholder:font-medium placeholder:text-slate-400"
+                  />
+
+                  <span className="absolute right-4 top-1/2 -translate-y-1/2 font-bold text-slate-400 pointer-events-none">
+                    VND
+                  </span>
+                </div>
               </div>
+
+              <p className="text-xs text-slate-400 font-medium">
+                Nhập số tiền mong muốn hoặc sử dụng mũi tên để tăng, giảm mỗi lần 10.000 đồng.
+              </p>
             </div>
           )}
 

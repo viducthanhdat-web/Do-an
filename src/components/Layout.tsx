@@ -46,6 +46,17 @@ export const Layout: React.FC<{
   const [isSidebarOpen, setIsSidebarOpen] = React.useState(false);
   const [isLoginModalOpen, setIsLoginModalOpen] = React.useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = React.useState(false);
+  const [logoutMessage, setLogoutMessage] = React.useState('');
+  React.useEffect(() => {
+    if (!logoutMessage) return;
+
+    const timer = setTimeout(() => {
+      setLogoutMessage('');
+    }, 3000);
+
+    return () => clearTimeout(timer);
+  }, [logoutMessage]);
+
 
   const navigation = [
     { id: 'marketplace', label: 'Sàn trao đổi', icon: Library },
@@ -61,6 +72,30 @@ export const Layout: React.FC<{
 
   return (
     <div className="flex h-screen bg-slate-50 overflow-hidden font-sans">
+      <AnimatePresence>
+        {logoutMessage && (
+          <motion.div
+            initial={{ opacity: 0, y: -20, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -10, scale: 0.95 }}
+            transition={{ duration: 0.25 }}
+            className="fixed top-5 right-5 z-[100] flex items-center gap-3 rounded-xl border border-emerald-200 bg-white px-5 py-4 shadow-lg"
+          >
+            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-100">
+              <ShieldCheck size={20} className="text-emerald-600" />
+            </div>
+
+            <div>
+              <p className="text-sm font-bold text-slate-900">
+                Đăng xuất thành công
+              </p>
+              <p className="text-xs text-slate-500">
+                Bạn đã đăng xuất khỏi UniExchange.
+              </p>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
       <AnimatePresence>
         {isSidebarOpen && (
           <motion.div
@@ -142,7 +177,15 @@ export const Layout: React.FC<{
                 </div>
               </button>
               <button
-                onClick={logout}
+                onClick={async () => {
+                  try {
+                    await logout();
+                    setLogoutMessage('Đã đăng xuất thành công!');
+                    setTimeout(() => setLogoutMessage(''), 3000);
+                  } catch (error) {
+                    console.error('Lỗi đăng xuất:', error);
+                  }
+                }}
                 className="flex items-center gap-3 w-full px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 rounded-lg transition-colors"
               >
                 <LogOut size={18} />
