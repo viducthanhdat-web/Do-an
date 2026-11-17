@@ -9,6 +9,7 @@ import {
   ShieldCheck,
   Menu,
   Award,
+  MessageCircle,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
@@ -41,10 +42,13 @@ export const Layout: React.FC<{
   children: React.ReactNode;
   activeTab: string;
   setActiveTab: (tab: string) => void;
-}> = ({ children, activeTab, setActiveTab }) => {
+  loginOpen: boolean;
+  onLoginOpenChange: (open: boolean) => void;
+}> = ({ children, activeTab, setActiveTab, loginOpen, onLoginOpenChange }) => {
   const { user, profile, logout } = useAuth();
   const [isSidebarOpen, setIsSidebarOpen] = React.useState(false);
-  const [isLoginModalOpen, setIsLoginModalOpen] = React.useState(false);
+  const isLoginModalOpen = loginOpen;
+  const setIsLoginModalOpen = onLoginOpenChange;
   const [isProfileModalOpen, setIsProfileModalOpen] = React.useState(false);
   const [logoutMessage, setLogoutMessage] = React.useState('');
   React.useEffect(() => {
@@ -60,6 +64,7 @@ export const Layout: React.FC<{
 
   const navigation = [
     { id: 'marketplace', label: 'Sàn trao đổi', icon: Library },
+    { id: 'messages', label: 'Tin nhắn', icon: MessageCircle },
     { id: 'my-items', label: 'Đồ của tôi', icon: LayoutDashboard },
     { id: 'my-holds', label: 'Lịch hẹn & Giao dịch', icon: History },
   ];
@@ -197,7 +202,7 @@ export const Layout: React.FC<{
               onClick={() => setIsLoginModalOpen(true)}
               className="w-full bg-slate-900 text-white py-3 rounded-xl font-semibold hover:bg-slate-800 transition-all shadow-lg shadow-slate-200"
             >
-              Đăng nhập Sinh viên
+              Đăng nhập
             </button>
           )}
         </div>

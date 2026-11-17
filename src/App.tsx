@@ -7,6 +7,7 @@ import { ItemDetail } from './components/ItemDetail';
 import { MyHolds } from './components/MyHolds';
 import { MyItems } from './components/MyItems';
 import { AdminDashboard } from './components/AdminDashboard';
+import { Messages } from './components/Messages';
 import { ItemDoc } from './types/schema';
 import { AnimatePresence } from 'motion/react';
 
@@ -14,6 +15,7 @@ function AppContent() {
   const [activeTab, setActiveTab] = useState('marketplace');
   const [selectedItem, setSelectedItem] = useState<ItemDoc | null>(null);
   const [editingItem, setEditingItem] = useState<ItemDoc | null>(null);
+  const [loginOpen, setLoginOpen] = useState(false);
   const { loading } = useAuth();
 
   const handleSetActiveTab = (tab: string) => {
@@ -37,7 +39,7 @@ function AppContent() {
   }
 
   return (
-    <Layout activeTab={activeTab} setActiveTab={handleSetActiveTab}>
+    <Layout activeTab={activeTab} setActiveTab={handleSetActiveTab} loginOpen={loginOpen} onLoginOpenChange={setLoginOpen}>
       <AnimatePresence mode="wait">
         {activeTab === 'marketplace' && (
           <Marketplace key="marketplace" onSelectItem={setSelectedItem} />
@@ -55,6 +57,9 @@ function AppContent() {
               setActiveTab('my-items');
             }}
           />
+        )}
+        {activeTab === 'messages' && (
+          <Messages key="messages" onLoginRequest={() => setLoginOpen(true)} />
         )}
         {activeTab === 'my-holds' && <MyHolds key="my-holds" />}
         {activeTab === 'my-items' && (
