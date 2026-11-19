@@ -4,7 +4,11 @@ import { formatUserError } from '../lib/utils';
 import { X, Mail, Phone, Lock, User as UserIcon, AlertCircle, ShieldCheck, Hash } from 'lucide-react';
 import { motion } from 'motion/react';
 
-export const LoginModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen, onClose }) => {
+export const LoginModal: React.FC<{
+    isOpen: boolean;
+    onClose: () => void;
+    onLoginSuccess: () => void;
+  }> = ({ isOpen, onClose, onLoginSuccess }) => {
   const { signInWithGoogle, signInWithEmail, signUpWithEmail, setupRecaptcha, clearRecaptcha, signInWithPhone } =
     useAuth();
   const [mode, setMode] = useState<'login' | 'signup' | 'phone'>('login');
@@ -63,6 +67,7 @@ export const LoginModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
         });
       } else {
         await signInWithEmail(email, password);
+        onLoginSuccess();
       }
       handleClose();
     } catch (err: unknown) {
@@ -77,6 +82,7 @@ export const LoginModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
     setLoading(true);
     try {
       await signInWithGoogle();
+      onLoginSuccess()
       handleClose();
     } catch (err: unknown) {
       setError(formatUserError(err, 'Không thể đăng nhập bằng Google.'));
@@ -106,6 +112,7 @@ export const LoginModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
     setLoading(true);
     try {
       await confirmationResult.confirm(otp.trim());
+      onLoginSuccess();
       handleClose();
     } catch (err: unknown) {
       setError(formatUserError(err, 'Mã OTP không hợp lệ.'));

@@ -10,6 +10,7 @@ import {
   Menu,
   Award,
   MessageCircle,
+  CheckCircle2
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
@@ -60,7 +61,17 @@ export const Layout: React.FC<{
 
     return () => clearTimeout(timer);
   }, [logoutMessage]);
+  const [loginSuccess, setLoginSuccess] = React.useState(false);
 
+  React.useEffect(() => {
+    if (!loginSuccess) return;
+
+    const timer = setTimeout(() => {
+      setLoginSuccess(false);
+    }, 2500);
+
+    return () => clearTimeout(timer);
+  }, [loginSuccess]);
 
   const navigation = [
     { id: 'marketplace', label: 'Sàn trao đổi', icon: Library },
@@ -208,7 +219,63 @@ export const Layout: React.FC<{
         </div>
       </motion.aside>
 
-      <LoginModal isOpen={isLoginModalOpen} onClose={() => setIsLoginModalOpen(false)} />
+      <LoginModal
+        isOpen={isLoginModalOpen}
+        onClose={() => setIsLoginModalOpen(false)}
+        onLoginSuccess={() => setLoginSuccess(true)}
+      />
+      <AnimatePresence>
+        {loginSuccess && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4"
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.85, y: 25 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 15 }}
+              transition={{ duration: 0.3, ease: 'easeOut' }}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="login-success-title"
+              className="w-full max-w-md rounded-3xl bg-white p-8 sm:p-10 text-center shadow-2xl"
+            >
+              <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-emerald-100">
+                <CheckCircle2
+                  size={46}
+                  className="text-emerald-600"
+                  strokeWidth={2.5}
+                />
+              </div>
+
+              <h2
+                id="login-success-title"
+                className="text-2xl sm:text-3xl font-black text-slate-900"
+              >
+                Đăng nhập thành công!
+              </h2>
+
+              <p className="mt-3 text-base leading-relaxed text-slate-500">
+                Chào mừng bạn quay trở lại với UniExchange.
+              </p>
+
+              <button
+                type="button"
+                onClick={() => setLoginSuccess(false)}
+                className="mt-7 w-full rounded-xl bg-slate-900 px-6 py-3.5 font-bold text-white shadow-lg transition-all hover:bg-slate-800 active:scale-[0.98]"
+              >
+                Tiếp tục
+              </button>
+
+              <p className="mt-4 text-xs text-slate-400">
+                Thông báo sẽ tự động đóng sau ít giây
+              </p>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
       <ProfileModal isOpen={isProfileModalOpen} onClose={() => setIsProfileModalOpen(false)} />
 
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
