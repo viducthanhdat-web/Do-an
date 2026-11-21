@@ -30,6 +30,13 @@ import {
 } from 'lucide-react';
 
 const MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024;
+const MAX_IMAGES = 10;
+
+type ImageEntry = {
+  id: string;
+  url: string;
+  file?: File;
+};
 
 export const PostItem: React.FC<{
   onCancel: () => void;
@@ -41,8 +48,19 @@ export const PostItem: React.FC<{
   const [priceInput, setPriceInput] = useState(editingItem?.price ? String(editingItem.price) : '');
   const [errorMsg, setErrorMsg] = useState('');
   const [subjects, setSubjects] = useState<SubjectDoc[]>(DEFAULT_SUBJECTS);
-  const [imageFile, setImageFile] = useState<File | null>(null);
-  const [imagePreview, setImagePreview] = useState<string | null>(editingItem?.primary_image || null);
+  const [images, setImages] = useState<ImageEntry[]>(() => {
+    const oldImages =
+      editingItem?.image_urls?.length
+        ? editingItem.image_urls
+        : editingItem?.primary_image
+          ? [editingItem.primary_image]
+          : [];
+
+    return oldImages.map((url, index) => ({
+      id: `old-${index}`,
+      url,
+    }));
+  });
 
   const [formData, setFormData] = useState<{
     title: string;
@@ -66,9 +84,22 @@ export const PostItem: React.FC<{
 
   useEffect(() => {
     setErrorMsg('');
-    setImageFile(null);
+    const oldImages =
+      editingItem?.image_urls?.length
+        ? editingItem.image_urls
+        : editingItem?.primary_image
+          ? [editingItem.primary_image]
+          : [];
+
+    setImages(
+      oldImages.map((url, index) => ({
+        id: `old-${index}`,
+        url,
+      }))
+    );
+
     setPriceInput(editingItem?.price ? String(editingItem.price) : '');
-    setImagePreview(editingItem?.primary_image || null);
+
     setFormData({
       title: editingItem?.title || '',
       description: editingItem?.description || '',
@@ -100,25 +131,51 @@ export const PostItem: React.FC<{
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setErrorMsg('');
-    if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
-      if (!file.type.startsWith('image/')) {
-        setErrorMsg('Vui lòng chỉ chọn tệp hình ảnh (PNG, JPG, JPEG, WEBP).');
-        e.target.value = '';
-        return;
-      }
-      if (file.size >= MAX_IMAGE_SIZE_BYTES) {
-        setErrorMsg('Kích thước ảnh không được vượt quá 5MB.');
-        e.target.value = '';
-        return;
-      }
-      setImageFile(file);
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setImagePreview(reader.result as string);
-      };
-      reader.readAsDataURL(file);
+
+    const selectedFiles = Array.from(e.target.files || []);
+
+    if (images.length + selectedFiles.length > MAX_IMAGES) {
+      setErrorMsg(`Bạn chỉ được đăng tối đa ${MAX_IMAGES} ảnh.`);
+      e.target.value = '';
+      return;
     }
+
+    const validFiles: File[] = [];
+
+    for (const file of selectedFiles) {
+      if (!file.type.startsWith('image/')) {
+        setErrorMsg('Vui lòng chỉ chọn tệp hình ảnh.');
+        continue;
+      }
+
+      if (file.size >= MAX_IMAGE_SIZE_BYTES) {
+        setErrorMsg('Mỗi ảnh phải có kích thước nhỏ hơn 5MB.');
+        continue;
+      }
+
+      validFiles.push(file);
+    }
+
+    const newImages: ImageEntry[] = validFiles.map((file, index) => ({
+      id: `new-${Date.now()}-${index}`,
+      url: URL.createObjectURL(file),
+      file,
+    }));
+
+    setImages((prev) => [...prev, ...newImages]);
+
+    e.target.value = '';
+  };
+  const handleRemoveImage = (id: string) => {
+    setImages((prev) => {
+      const imageToRemove = prev.find((image) => image.id === id);
+
+      if (imageToRemove?.file) {
+        URL.revokeObjectURL(imageToRemove.url);
+      }
+
+      return prev.filter((image) => image.id !== id);
+    });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -136,19 +193,25 @@ export const PostItem: React.FC<{
     setErrorMsg('');
     setLoading(true);
     try {
-      let nextImageUrls = editingItem?.image_urls || [];
-      let nextPrimaryImage = editingItem?.primary_image || '';
+      const nextImageUrls: string[] = [];
 
-      if (imageFile) {
-        const storageRef = ref(storage, `items/${user.uid}_${Date.now()}_${imageFile.name}`);
-        const snapshot = await uploadBytes(storageRef, imageFile);
-        const uploadedUrl = await getDownloadURL(snapshot.ref);
-        nextImageUrls = [uploadedUrl];
-        nextPrimaryImage = uploadedUrl;
-      } else if (!imagePreview) {
-        nextImageUrls = [];
-        nextPrimaryImage = '';
+      for (const image of images) {
+        if (image.file) {
+          const storageRef = ref(
+            storage,
+            `items/${user.uid}_${Date.now()}_${image.file.name}`
+          );
+
+          const snapshot = await uploadBytes(storageRef, image.file);
+          const uploadedUrl = await getDownloadURL(snapshot.ref);
+
+          nextImageUrls.push(uploadedUrl);
+        } else {
+          nextImageUrls.push(image.url);
+        }
       }
+
+      const nextPrimaryImage = nextImageUrls[0] || '';
 
       const selectedSub = subjects.find(
         (s) => s.subject_code === formData.subject_id || s.id === formData.subject_id
@@ -266,39 +329,68 @@ export const PostItem: React.FC<{
 
         <form onSubmit={handleSubmit} className="space-y-7">
           {/* Image Upload */}
-          <div className="space-y-2.5">
+          <div className="space-y-3">
             <label className="text-sm font-bold text-slate-700 flex items-center gap-2">
               <ImageIcon size={16} />
               Hình ảnh thực tế của sách / thiết bị
             </label>
-            <div className="flex items-center justify-center w-full">
-              {imagePreview ? (
-                <div className="relative w-full aspect-video rounded-2xl overflow-hidden border border-slate-200">
-                  <img src={imagePreview} alt="Preview" className="w-full h-full object-cover" />
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              {images.map((image, index) => (
+                <div
+                  key={image.id}
+                  className="relative aspect-square rounded-2xl overflow-hidden border border-slate-200"
+                >
+                  <img
+                    src={image.url}
+                    alt={`Ảnh vật phẩm ${index + 1}`}
+                    className="w-full h-full object-cover"
+                  />
+
+                  {index === 0 && (
+                    <span className="absolute bottom-2 left-2 px-2 py-1 bg-slate-900/80 text-white text-xs rounded-lg">
+                      Ảnh đại diện
+                    </span>
+                  )}
+
                   <button
                     type="button"
-                    onClick={() => {
-                      setImageFile(null);
-                      setImagePreview(null);
-                    }}
-                    className="absolute top-4 right-4 p-2 bg-white/90 rounded-full text-slate-700 hover:text-red-600 shadow-sm"
+                    onClick={() => handleRemoveImage(image.id)}
+                    className="absolute top-2 right-2 p-1.5 bg-white/90 rounded-full text-slate-700 hover:text-red-600 shadow"
+                    aria-label="Xóa ảnh"
                   >
-                    <X size={20} />
+                    <X size={18} />
                   </button>
                 </div>
-              ) : (
-                <label className="flex flex-col items-center justify-center w-full aspect-video border-2 border-slate-200 border-dashed rounded-2xl cursor-pointer bg-slate-50 hover:bg-slate-100 transition-all group">
-                  <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                    <Upload className="w-10 h-10 mb-3 text-slate-400 group-hover:scale-110 transition-transform" />
-                    <p className="mb-1 text-sm text-slate-600">
-                      <span className="font-bold">Nhấn để tải ảnh lên</span> (PNG, JPG, JPEG)
-                    </p>
-                    <p className="text-xs text-slate-400 font-semibold">Chụp rõ bìa sách hoặc tình trạng thiết bị</p>
-                  </div>
-                  <input type="file" className="hidden" accept="image/*" onChange={handleImageChange} />
+              ))}
+
+              {images.length < MAX_IMAGES && (
+                <label className="aspect-square flex flex-col items-center justify-center border-2 border-dashed border-slate-300 rounded-2xl cursor-pointer bg-slate-50 hover:bg-slate-100 transition-colors">
+                  <Upload size={28} className="text-slate-400 mb-2" />
+
+                  <span className="text-sm font-bold text-slate-600">
+                    Thêm ảnh
+                  </span>
+
+                  <span className="text-xs text-slate-400 mt-1">
+                    {images.length}/{MAX_IMAGES}
+                  </span>
+
+                  <input
+                    type="file"
+                    className="hidden"
+                    accept="image/*"
+                    multiple
+                    onChange={handleImageChange}
+                  />
                 </label>
               )}
             </div>
+
+            <p className="text-xs text-slate-400">
+              Có thể thêm tối đa 10 ảnh, mỗi ảnh nhỏ hơn 5MB.
+              Ảnh đầu tiên sẽ được sử dụng làm ảnh đại diện.
+            </p>
           </div>
 
           {/* Title & Subject */}
