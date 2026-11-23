@@ -852,27 +852,81 @@ service cloud.firestore {
 
       allow update: if isValidItem(incoming()) && (
                       // Seller editing own item while not held or completed
-                      (isOwner(existing().seller_id) &&
-                       existing().item_status != 'held' &&
-                       existing().item_status != 'completed' &&
-                       incoming().seller_id == existing().seller_id &&
-                       incoming().created_at == existing().created_at &&
-                       incoming().get('active_hold_id', null) == existing().get('active_hold_id', null) &&
-                       incoming().item_status in ['available', 'hidden'] &&
-                       (incoming().moderation_status == 'pending' ||
-                        (incoming().diff(existing()).affectedKeys().hasOnly(['item_status', 'updated_at']) &&
-                         incoming().moderation_status == existing().moderation_status)) &&
-                       incoming().updated_at == request.time) ||
-                      // Requester placing an atomic Hold (available -> held)
+                      (
+                        isOwner(existing().seller_id) &&
+                        existing().moderation_status == 'pending' &&
+                        existing().item_status != 'held' &&
+                        existing().item_status != 'completed' &&
+
+                        incoming().seller_id == existing().seller_id &&
+                        incoming().created_at == existing().created_at &&
+                        incoming().get('active_hold_id', null) ==
+                          existing().get('active_hold_id', null) &&
+
+                        incoming().item_status == existing().item_status &&
+                        incoming().moderation_status == 'pending' &&
+                        incoming().get('reject_reason', null) ==
+                          existing().get('reject_reason', null) &&
+
+                        incoming().diff(existing()).affectedKeys().hasOnly([
+                          'category_id',
+                          'subject_id',
+                          'subject_name',
+                          'title',
+                          'description',
+                          'item_type',
+                          'price',
+                          'condition_level',
+                          'image_urls',
+                          'primary_image',
+                          'updated_at'
+                        ]) &&
+
+                        incoming().updated_at == request.time
+                      ) ||
+
+                      // Seller chỉnh sửa bài đã được duyệt
+                      (
+                        isOwner(existing().seller_id) &&
+                        existing().moderation_status == 'approved' &&
+                        existing().item_status != 'held' &&
+                        existing().item_status != 'completed' &&
+
+                        incoming().seller_id == existing().seller_id &&
+                        incoming().created_at == existing().created_at &&
+                        incoming().get('active_hold_id', null) ==
+                          existing().get('active_hold_id', null) &&
+
+                        incoming().item_status == existing().item_status &&
+                        incoming().moderation_status == 'approved' &&
+                        incoming().get('reject_reason', null) ==
+                          existing().get('reject_reason', null) &&
+
+                        incoming().diff(existing()).affectedKeys().hasOnly([
+                          'category_id',
+                          'subject_id',
+                          'subject_name',
+                          'condition_level',
+                          'description',
+                          'updated_at'
+                        ]) &&
+
+                        incoming().updated_at == request.time
+                      ) ||
+
+                      // Requester placing an atomic Hold (giữ nguyên)
                       ('active_hold_id' in incoming() &&
-                       incoming().active_hold_id is string &&
-                       incoming().active_hold_id.size() >= 1 &&
-                       isValidAtomicHoldPlacement(itemId)) ||
-                      // Completing or Releasing/Cancelling a Hold (held -> completed | available)
+                      incoming().active_hold_id is string &&
+                      incoming().active_hold_id.size() >= 1 &&
+                      isValidAtomicHoldPlacement(itemId)) ||
+
+                      // Completing or Releasing/Cancelling a Hold (giữ nguyên)
                       ('active_hold_id' in existing() &&
-                       existing().active_hold_id is string &&
-                       existing().active_hold_id.size() >= 1 &&
-                       isValidHoldResolution()) ||
+                      existing().active_hold_id is string &&
+                      existing().active_hold_id.size() >= 1 &&
+                      isValidHoldResolution()) ||
+
+                      // Admin (giữ nguyên)
                       isAdmin()
                     );
 

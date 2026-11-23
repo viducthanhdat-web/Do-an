@@ -134,6 +134,11 @@ export const PostItem: React.FC<{
   }, []);
 
   const isSuspended = Boolean(profile && profile.status !== 'active');
+  const isApprovedEdit =
+  editingItem?.moderation_status === 'approved';
+
+  const isPendingEdit =
+  editingItem?.moderation_status === 'pending';
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setErrorMsg('');
@@ -191,82 +196,192 @@ export const PostItem: React.FC<{
       setErrorMsg('Tài khoản của bạn đang bị tạm khóa quyền đăng tin (FR-02).');
       return;
     }
-    if (editingItem && (editingItem.item_status === 'held' || editingItem.item_status === 'completed')) {
-      setErrorMsg('Không thể chỉnh sửa vật phẩm đang được giữ chỗ hoặc đã trao đổi xong.');
-      return;
+
+    if (editingItem) {
+      if (editingItem.moderation_status === 'rejected') {
+        setErrorMsg('Tin đã bị từ chối, không thể chỉnh sửa.');
+        return;
+      }
+
+      if (
+        editingItem.item_status === 'held' ||
+        editingItem.item_status === 'completed'
+      ) {
+        setErrorMsg('Không thể chỉnh sửa vật phẩm đang được giữ chỗ hoặc đã trao đổi xong.');
+        return;
+      }
+
+      if (
+        !isPendingEdit &&
+        !isApprovedEdit &&
+        profile.role !== 'admin'
+      ) {
+        setErrorMsg('Bạn không có quyền chỉnh sửa bài đăng này.');
+        return;
+      }
     }
 
     setErrorMsg('');
     setLoading(true);
     try {
-      const nextImageUrls: string[] = [];
 
-      for (const image of images) {
-        if (image.file) {
-          const storageRef = ref(
-            storage,
-            `items/${user.uid}_${Date.now()}_${image.file.name}`
-          );
+      const isAdmin = profile.role === 'admin';
+      const nowServer = serverTimestamp();
 
-          const snapshot = await uploadBytes(storageRef, image.file);
-          const uploadedUrl = await getDownloadURL(snapshot.ref);
-
-          nextImageUrls.push(uploadedUrl);
-        } else {
-          nextImageUrls.push(image.url);
-        }
-      }
-
-      const nextPrimaryImage = nextImageUrls[0] || '';
+      const descriptionValue = isCustomDescription
+        ? formData.description.trim()
+        : 'Vật phẩm vẫn còn sử dụng tốt và đáp ứng nhu cầu học tập.';
 
       const selectedSub = subjects.find(
-        (s) => s.subject_code === formData.subject_id || s.id === formData.subject_id
+        (s) =>
+          s.subject_code === formData.subject_id ||
+          s.id === formData.subject_id
       );
-      const subjectIdValue = formData.subject_id === 'OTHER' ? null : formData.subject_id;
+
+      const subjectIdValue =
+        formData.subject_id === 'OTHER'
+          ? null
+          : formData.subject_id;
+
       const subjectDisplay =
         formData.subject_id === 'OTHER'
           ? formData.custom_subject.trim() || 'Chung'
           : selectedSub
-          ? `${selectedSub.subject_code} - ${selectedSub.subject_name}`
-          : formData.subject_id;
+            ? `${selectedSub.subject_code} - ${selectedSub.subject_name}`
+            : formData.subject_id;
 
-      const finalPrice = formData.item_type === 'gift' ? 0 : Math.max(1000, formData.price);
-      const isAdmin = profile.role === 'admin';
-      const nowServer = serverTimestamp();
-
-      const itemPayload = {
-        seller_summary: {
-          full_name: profile.full_name || 'Sinh viên',
-          trust_score: profile.current_trust_score ?? 100,
-          avatar_url: profile.avatar_url || '',
-        },
-        category_id: formData.category_id,
-        subject_id: subjectIdValue,
-        subject_name: subjectDisplay,
-        title: formData.title.trim(),
-        description: isCustomDescription
-          ? formData.description.trim()
-          : 'Vật phẩm vẫn còn sử dụng tốt và đáp ứng nhu cầu học tập.',
-        item_type: formData.item_type,
-        price: finalPrice,
-        condition_level: formData.condition_level,
-        image_urls: nextImageUrls,
-        primary_image: nextPrimaryImage,
-        item_status: 'available' as const,
-        moderation_status: (isAdmin ? 'approved' : 'pending') as 'approved' | 'pending',
-        reject_reason: null,
-        updated_at: nowServer,
-      };
-
-      if (editingItem) {
-        await updateDoc(doc(db, 'items', editingItem.id), itemPayload);
-      } else {
-        await addDoc(collection(db, 'items'), {
-          ...itemPayload,
-          seller_id: user.uid,
-          active_hold_id: null,
-          created_at: nowServer,
+      // 1. Đang chỉnh sửa bài đã duyệt
+      // Chỉ cập nhật đúng 3 trường được phép.
+      if (editingItem && isApprovedEdit && !isAdmin) {
+        await updateDoc(doc(db, 'items', editingItem.id), {
+          category_id: formData.category_id,
+          subject_id: subjectIdValue,
+          subject_name: subjectDisplay,
+          condition_level: formData.condition_level,
+          description: descriptionValue,
+          updated_at: nowServer,
+          
         });
+      }
+      // 2. Đang chỉnh sửa bài chờ duyệt
+      // Cho phép sửa nội dung nhưng giữ nguyên trạng thái kiểm duyệt.
+      else if (editingItem && isPendingEdit && !isAdmin) {
+        const nextImageUrls: string[] = [];
+
+        for (const image of images) {
+          if (image.file) {
+            const storageRef = ref(
+              storage,
+              `items/${user.uid}_${Date.now()}_${image.file.name}`
+            );
+
+            const snapshot = await uploadBytes(storageRef, image.file);
+            const uploadedUrl = await getDownloadURL(snapshot.ref);
+
+            nextImageUrls.push(uploadedUrl);
+          } else {
+            nextImageUrls.push(image.url);
+          }
+        }
+
+        await updateDoc(doc(db, 'items', editingItem.id), {
+          category_id: formData.category_id,
+          subject_id: formData.subject_id === 'OTHER'
+            ? null
+            : formData.subject_id,
+          subject_name: formData.subject_id === 'OTHER'
+            ? formData.custom_subject.trim() || 'Chung'
+            : (
+                subjects.find(
+                  (s) =>
+                    s.subject_code === formData.subject_id ||
+                    s.id === formData.subject_id
+                )
+                  ? `${subjects.find(
+                      (s) =>
+                        s.subject_code === formData.subject_id ||
+                        s.id === formData.subject_id
+                    )!.subject_code} - ${
+                      subjects.find(
+                        (s) =>
+                          s.subject_code === formData.subject_id ||
+                          s.id === formData.subject_id
+                      )!.subject_name
+                    }`
+                  : formData.subject_id
+              ),
+          title: formData.title.trim(),
+          description: descriptionValue,
+          item_type: formData.item_type,
+          price: formData.item_type === 'gift'
+            ? 0
+            : Math.max(1000, formData.price),
+          condition_level: formData.condition_level,
+          image_urls: nextImageUrls,
+          primary_image: nextImageUrls[0] || '',
+          updated_at: nowServer,
+        });
+      }
+      // 3. Tạo bài đăng mới hoặc thao tác của Admin
+      else {
+        const nextImageUrls: string[] = [];
+
+        for (const image of images) {
+          if (image.file) {
+            const storageRef = ref(
+              storage,
+              `items/${user.uid}_${Date.now()}_${image.file.name}`
+            );
+
+            const snapshot = await uploadBytes(storageRef, image.file);
+            const uploadedUrl = await getDownloadURL(snapshot.ref);
+
+            nextImageUrls.push(uploadedUrl);
+          } else {
+            nextImageUrls.push(image.url);
+          }
+        }
+
+
+        const finalPrice =
+          formData.item_type === 'gift'
+            ? 0
+            : Math.max(1000, formData.price);
+
+        const itemPayload = {
+          seller_summary: {
+            full_name: profile.full_name || 'Sinh viên',
+            trust_score: profile.current_trust_score ?? 100,
+            avatar_url: profile.avatar_url || '',
+          },
+          category_id: formData.category_id,
+          subject_id: subjectIdValue,
+          subject_name: subjectDisplay,
+          title: formData.title.trim(),
+          description: descriptionValue,
+          item_type: formData.item_type,
+          price: finalPrice,
+          condition_level: formData.condition_level,
+          image_urls: nextImageUrls,
+          primary_image: nextImageUrls[0] || '',
+          item_status: 'available' as const,
+          moderation_status: (isAdmin ? 'approved' : 'pending') as
+            'approved' | 'pending',
+          reject_reason: null,
+          updated_at: nowServer,
+        };
+
+        if (editingItem) {
+          // Admin vẫn sử dụng luồng cập nhật hiện tại.
+          await updateDoc(doc(db, 'items', editingItem.id), itemPayload);
+        } else {
+          await addDoc(collection(db, 'items'), {
+            ...itemPayload,
+            seller_id: user.uid,
+            active_hold_id: null,
+            created_at: nowServer,
+          });
+        }
       }
 
       onSuccess();
@@ -361,37 +476,39 @@ export const PostItem: React.FC<{
                     </span>
                   )}
 
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveImage(image.id)}
-                    className="absolute top-2 right-2 p-1.5 bg-white/90 rounded-full text-slate-700 hover:text-red-600 shadow"
-                    aria-label="Xóa ảnh"
-                  >
-                    <X size={18} />
-                  </button>
+                  {!isApprovedEdit && (
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveImage(image.id)}
+                      className="absolute top-2 right-2 p-1.5 bg-white/90 rounded-full text-slate-700 hover:text-red-600 shadow"
+                      aria-label="Xóa ảnh"
+                    >
+                      <X size={18} />
+                    </button>
+                  )}
                 </div>
               ))}
 
-              {images.length < MAX_IMAGES && (
-                <label className="aspect-square flex flex-col items-center justify-center border-2 border-dashed border-slate-300 rounded-2xl cursor-pointer bg-slate-50 hover:bg-slate-100 transition-colors">
-                  <Upload size={28} className="text-slate-400 mb-2" />
+              {!isApprovedEdit && images.length < MAX_IMAGES && (
+                  <label className="aspect-square flex flex-col items-center justify-center border-2 border-dashed border-slate-300 rounded-2xl cursor-pointer bg-slate-50 hover:bg-slate-100 transition-colors">
+                    <Upload size={28} className="text-slate-400 mb-2" />
 
-                  <span className="text-sm font-bold text-slate-600">
-                    Thêm ảnh
-                  </span>
+                    <span className="text-sm font-bold text-slate-600">
+                      Thêm ảnh
+                    </span>
 
-                  <span className="text-xs text-slate-400 mt-1">
-                    {images.length}/{MAX_IMAGES}
-                  </span>
+                    <span className="text-xs text-slate-400 mt-1">
+                      {images.length}/{MAX_IMAGES}
+                    </span>
 
-                  <input
-                    type="file"
-                    className="hidden"
-                    accept="image/*"
-                    multiple
-                    onChange={handleImageChange}
-                  />
-                </label>
+                    <input
+                      type="file"
+                      className="hidden"
+                      accept="image/*"
+                      multiple
+                      onChange={handleImageChange}
+                    />
+                  </label>
               )}
             </div>
 
@@ -412,6 +529,7 @@ export const PostItem: React.FC<{
                 required
                 maxLength={100}
                 type="text"
+                disabled={isApprovedEdit}
                 placeholder="VD: Giáo trình Cơ sở dữ liệu + Bài tập"
                 value={formData.title}
                 onChange={(e) => setFormData({ ...formData, title: e.target.value })}
@@ -494,6 +612,7 @@ export const PostItem: React.FC<{
               <div className="grid grid-cols-2 gap-3">
                 <button
                   type="button"
+                  disabled={isApprovedEdit}
                   onClick={() => {
                     setFormData({ ...formData, item_type: 'gift', price: 0 });
                     setPriceInput('');
@@ -508,6 +627,7 @@ export const PostItem: React.FC<{
                 </button>
                 <button
                   type="button"
+                  disabled={isApprovedEdit}
                   onClick={() => {
                     const nextPrice = formData.price > 0 ? formData.price : 20000;
                     setFormData({ ...formData, item_type: 'sell', price: nextPrice });
@@ -520,6 +640,7 @@ export const PostItem: React.FC<{
                   }`}
                 >
                   <Coins size={16} /> Giá tượng trưng
+                  
                 </button>
               </div>
             </div>
@@ -535,6 +656,7 @@ export const PostItem: React.FC<{
                 <div className="flex flex-col gap-1">
                   <button
                     type="button"
+                    disabled={isApprovedEdit}
                     aria-label="Tăng giá 10.000 đồng"
                     onClick={() => {
                       const nextPrice = (Number(priceInput) || 0) + 10000;
@@ -548,6 +670,7 @@ export const PostItem: React.FC<{
 
                   <button
                     type="button"
+                    disabled={isApprovedEdit}
                     aria-label="Giảm giá 10.000 đồng"
                     onClick={() => {
                       const currentPrice = Number(priceInput) || 0;
@@ -566,6 +689,7 @@ export const PostItem: React.FC<{
                     required
                     type="text"
                     inputMode="numeric"
+                    disabled={isApprovedEdit}
                     placeholder="Ví dụ: 50.000"
                     value={priceInput}
                     onChange={(e) => {
@@ -644,7 +768,7 @@ export const PostItem: React.FC<{
             ) : (
               <>
                 <CheckCircle2 size={20} />
-                {editingItem ? 'Lưu thay đổi & gửi duyệt lại' : 'Gửi đăng tin vật phẩm'}
+                {editingItem ? 'Lưu thay đổi' : 'Gửi đăng tin vật phẩm'}
               </>
             )}
           </button>

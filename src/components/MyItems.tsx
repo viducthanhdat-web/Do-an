@@ -214,12 +214,17 @@ export const MyItems: React.FC<{ onEditItem?: (item: ItemDoc) => void }> = ({ on
                     disabled={
                       busyId === item.id ||
                       item.item_status === 'held' ||
-                      item.item_status === 'completed'
+                      item.item_status === 'completed' ||
+                      item.moderation_status === 'rejected'
                     }
                     title={
-                      item.item_status === 'held' || item.item_status === 'completed'
-                        ? 'Không thể sửa khi đang giữ chỗ hoặc đã trao đổi xong'
-                        : 'Chỉnh sửa bài đăng'
+                      item.moderation_status === 'rejected'
+                        ? 'Tin đã bị từ chối, không thể chỉnh sửa'
+                        : item.item_status === 'held' || item.item_status === 'completed'
+                          ? 'Không thể sửa khi đang giữ chỗ hoặc đã trao đổi xong'
+                          : item.moderation_status === 'approved'
+                            ? 'Chỉ sửa danh mục, tình trạng và mô tả'
+                            : 'Chỉnh sửa bài đăng'
                     }
                     onClick={() => onEditItem(item)}
                     className="p-3 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-2xl transition-all disabled:opacity-25 disabled:cursor-not-allowed"
