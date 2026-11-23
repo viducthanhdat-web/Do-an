@@ -48,6 +48,7 @@ export const PostItem: React.FC<{
   const [priceInput, setPriceInput] = useState(editingItem?.price ? String(editingItem.price) : '');
   const [errorMsg, setErrorMsg] = useState('');
   const [subjects, setSubjects] = useState<SubjectDoc[]>(DEFAULT_SUBJECTS);
+  const [isCustomDescription, setIsCustomDescription] = useState(false);
   const [images, setImages] = useState<ImageEntry[]>(() => {
     const oldImages =
       editingItem?.image_urls?.length
@@ -110,6 +111,11 @@ export const PostItem: React.FC<{
       item_type: editingItem?.item_type || 'gift',
       price: editingItem?.price ?? 0,
     });
+
+    setIsCustomDescription(
+      editingItem ? Boolean(editingItem.description?.trim()) : false
+    );
+
   }, [editingItem]);
 
   useEffect(() => {
@@ -238,7 +244,9 @@ export const PostItem: React.FC<{
         subject_id: subjectIdValue,
         subject_name: subjectDisplay,
         title: formData.title.trim(),
-        description: formData.description.trim() || 'Sách/thiết bị còn sử dụng tốt.',
+        description: isCustomDescription
+          ? formData.description.trim()
+          : 'Vật phẩm vẫn còn sử dụng tốt và đáp ứng nhu cầu học tập.',
         item_type: formData.item_type,
         price: finalPrice,
         condition_level: formData.condition_level,
@@ -585,17 +593,45 @@ export const PostItem: React.FC<{
             </div>
           )}
 
-          <div className="space-y-2.5">
-            <label className="text-sm font-bold text-slate-700">Mô tả chi tiết tình trạng</label>
-            <textarea
-              required
-              maxLength={1000}
-              rows={3}
-              placeholder="VD: Sách xuất bản 2024, đã bọc nilon, có ghi chú công thức quan trọng ở chương 3..."
-              value={formData.description}
-              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              className="w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-slate-900 outline-none font-medium resize-none"
-            />
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <label className="text-sm font-bold text-slate-700">
+                Mô tả chi tiết tình trạng
+              </label>
+
+              <button
+                type="button"
+                onClick={() => setIsCustomDescription((prev) => !prev)}
+                className={`px-4 py-2 rounded-xl text-xs font-bold transition-colors ${
+                  isCustomDescription
+                    ? 'bg-emerald-100 text-emerald-700'
+                    : 'bg-slate-100 text-slate-600'
+                }`}
+              >
+                {isCustomDescription ? 'Đang bật' : 'Đang tắt'}
+              </button>
+            </div>
+
+            {isCustomDescription ? (
+              <textarea
+                required
+                maxLength={1000}
+                rows={3}
+                placeholder="VD: Sách xuất bản 2024, đã bọc nilon, có ghi chú công thức quan trọng ở chương 3..."
+                value={formData.description}
+                onChange={(e) =>
+                  setFormData({ ...formData, description: e.target.value })
+                }
+                className="w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-slate-900 outline-none font-medium resize-none"
+              />
+            ) : (
+              <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm text-slate-500">
+                Hệ thống sẽ tự động sử dụng mô tả mặc định:
+                <p className="mt-2 font-semibold text-slate-700">
+                  Vật phẩm vẫn còn sử dụng tốt và đáp ứng nhu cầu học tập.
+                </p>
+              </div>
+            )}
           </div>
 
           <button
